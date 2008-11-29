@@ -1,0 +1,3 @@
+target  cb
+    short-desc = "Citizens Bank"
+	target-type = "cb"

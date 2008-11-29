@@ -1,0 +1,102 @@
+#!/usr/bin/python -tt
+
+# American Funds account balance scraper v1.1.1
+# Copyright (c) 2007-8, John Morrissey <jwm@horde.net>
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of Version 2 of the GNU General Public License as
+# published by the Free Software Foundation
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+USERNAME = ''
+PASSWORD = ''
+AF_TAB = '/var/cache/cricket/af.tab'
+
+from getopt import gnu_getopt, GetoptError
+from os.path import basename
+import re
+import sys
+from urllib import urlencode
+from urllib2 import Request
+
+import mechanize
+
+def usage():
+	print 'American Funds account balance scraper v1.1.1'
+	print 'Usage: %s [-h|--help]'  % basename(sys.argv[0])
+	print ''
+	print '    -h, --help                    display this help and exit'
+
+try:
+	options = gnu_getopt(sys.argv[1:], 'h', ['help'])
+except GetoptError, e:
+	print basename(sys.argv[0]) + ': ' + str(e)
+	usage()
+	sys.exit(1)
+
+for option in options[0]:
+	if option[0] == '-h' or option[0] == '--help':
+		usage()
+		sys.exit(0)
+
+if USERNAME == None or PASSWORD == None or AF_TAB == None:
+	print 'You must edit %s to configure your usenrame and password.' % sys.argv[0]
+	sys.exit(1)
+
+
+auth = Request('https://www.americanfunds.com/login/login.htm',
+	urlencode((
+		('action', 'login'),
+		('loginId', USERNAME),
+		('password', PASSWORD),
+	))
+)
+auth.add_header('User-Agent', 'American Funds account balance scraper v1.1.1')
+data = mechanize.urlopen(auth)
+
+if ''.join(data.fp.readlines()).find('routine site maintenance') != -1 or \
+   ''.join(data.fp.readlines()).find('experiencing technical difficulties') != -1:
+	print 'americanfunds.com is unavailable.'
+	sys.exit(1)
+
+
+auth = Request('https://www.americanfunds.com/account/account-summary.htm')
+auth.add_header('User-Agent', 'American Funds account balance scraper v1.1.1')
+data = mechanize.urlopen(auth)
+
+response = ''.join(data.fp.readlines())
+
+out = open(AF_TAB, 'w')
+
+# FIXME: use BeautifulSoup
+matches = re.search(r'Non-retirement accounts:.*?\$([\d\.,]+)',
+	response, re.DOTALL)
+out.write('af-nonret %s\n' % matches.group(1).replace(',', ''))
+
+p = re.compile(r'ROTH IRA.*', re.DOTALL)
+nonroth = p.sub('', response)
+for name, balance in re.findall(r'<div><a href="[^>]+funds/details[^>]+>\s*(.*?) &#150;.*?<a href="[^>]+view-history[^>]+>.*?<div>.*?\$((?:[\d\.]+,)?[\d\.]+)', nonroth, re.DOTALL):
+	out.write('%s %s\n' % (
+		name.lower().replace(' ', '_')[:9], balance.replace(',', '')
+	))
+
+matches = re.search(r'Retirement accounts:.*?\$([\d\.,]+)', response,
+	re.DOTALL)
+out.write('%s %s\n' % ('af-roth', matches.group(1).replace(',', '')))
+
+p = re.compile('.*ROTH IRA', re.DOTALL)
+roth = p.sub('', response)
+for name, balance in re.findall(r'<div><a href="[^>]+funds/details[^>]+>\s*(.*?) &#150;.*?<a href="[^>]+view-history[^>]+>.*?<div>.*?\$((?:[\d\.]+,)?[\d\.]+)', roth, re.DOTALL):
+	out.write('%s-roth %s\n' % (
+		name.lower().replace(' ', '_')[:9], balance.replace(',', '')
+	))
+
+out.close()

@@ -1,0 +1,89 @@
+#!/usr/bin/python -tt
+
+# HSBC account balance scraper v1.1
+# Copyright (c) 2007-8, John Morrissey <jwm@horde.net>
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of Version 2 of the GNU General Public License as
+# published by the Free Software Foundation
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+ACCOUNT_NUM = None
+ACCOUNT_PASS = None
+ACCOUNT_PASS2 = None
+# The name of the account as it appears in the Account Summary page.
+ACCOUNT_NAME = None
+HSBC_TAB = '/var/cache/cricket/hsbc.tab'
+
+from getopt import gnu_getopt, GetoptError
+from os.path import basename
+import re
+import sys
+from urllib import urlencode
+from urllib2 import Request
+
+from BeautifulSoup import BeautifulSoup
+import mechanize
+
+def usage():
+	print 'HSBC account balance scraper v1.1'
+	print 'Usage: %s [-h|--help]' % basename(sys.argv[0])
+	print ''
+	print '    -h, --help                    display this help and exit'
+
+try:
+	options = gnu_getopt(sys.argv[1:], 'h', ['help'])[0]
+except GetoptError, e:
+	print basename(sys.argv[0]) + ': ' + str(e)
+	usage()
+	sys.exit(1)
+
+for option in options:
+	if option[0] == '-h' or option[0] == '--help':
+		usage()
+		sys.exit(0)
+
+if not ACCOUNT_NUM or not ACCOUNT_PASS or not ACCOUNT_PASS2:
+	print 'You must edit %s to configure your account number and passwords.' % sys.argv[0]
+	sys.exit(1)
+
+
+auth = Request('https://www.hsbcdirect.com/1/2/?idv_cmd=idv.Authentication',
+	urlencode((
+		('userid', ACCOUNT_NUM),
+		('nextPage', 'hsbc.pib.view-accounts.post-reg'),
+	))
+)
+auth.add_header('User-Agent', 'HSBC account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www.hsbcdirect.com/1/2/?idv_cmd=idv.Authentication',
+	urlencode((
+		('memorableAnswer', ACCOUNT_PASS),
+		('password', ACCOUNT_PASS2),
+	))
+)
+auth.add_header('User-Agent', 'HSBC account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www.hsbcdirect.com/1/2/3/personal/online-services/personal-internet-banking/view-accounts/account-summary?isUrlRedirect=yes&urlRedirectCommand=cmd_AccountSummary')
+auth.add_header('User-Agent', 'HSBC account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+soup = BeautifulSoup(''.join(data.fp.readlines()))
+balance = soup.find(text = ACCOUNT_NAME).findParent(name = 'tr').\
+	find(text = re.compile(r'\$([0-9,]+\.[0-9]{2})'))
+
+out = open(HSBC_TAB, 'w')
+out.write(balance.replace('$', '').replace(',', '') + '\n')
+out.close()

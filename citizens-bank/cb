@@ -1,0 +1,132 @@
+#!/usr/bin/python -tt
+
+# Citizens Bank account balance scraper v1.1
+# Copyright (c) 2007-8, John Morrissey <jwm@horde.net>
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of Version 2 of the GNU General Public License as
+# published by the Free Software Foundation
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+USERNAME = None
+PASSWORD = None
+ACCOUNT_NUM = None
+PMDATA = None
+CB_TAB = '/var/cache/cricket/cb.tab'
+
+from getopt import gnu_getopt, GetoptError
+import mechanize
+from os.path import basename
+import re
+import sys
+from time import time
+from urllib import urlencode
+from urllib2 import Request
+
+def usage():
+	print 'Citizens Bank account balance scraper v1.1'
+	print 'Usage: %s [-h|--help]' % basename(sys.argv[0])
+	print ''
+	print '    -h, --help                    display this help and exit'
+
+try:
+	options = gnu_getopt(sys.argv[1:], 'h', ['help'])[0]
+except GetoptError, e:
+	print basename(sys.argv[0]) + ': ' + str(e)
+	usage()
+	sys.exit(1)
+
+for option in options:
+	if option[0] == '-h' or option[0] == '--help':
+		usage()
+		sys.exit(0)
+
+if not USERNAME or not PASSWORD or not ACCOUNT_NUM or not PMDATA:
+	print 'You must edit %s to configure your username, password, account number, and PMData cookie.' % sys.argv[0]
+	sys.exit(1)
+
+jar = mechanize.CookieJar()
+jar.set_cookie(mechanize.Cookie(
+	None,
+	'PMData', PMDATA, None, False,
+	'.citizensbankonline.com', True, True,
+	'/efs/servlet', True, True,
+	int(time()) + 86400, False, None, None, None
+))
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/wait.jsp?target=default.jsp',
+	urlencode((
+		('UserID', USERNAME),
+	))
+)
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/loginnew-wait.jsp')
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/sendit.jsp',
+	urlencode((
+		('pmdata', PMDATA),
+	))
+)
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/login-rsa-wait.jsp?detect=3')
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/wait.jsp?target=login-init-wait.jsp',
+	urlencode((
+		('Password', PASSWORD),
+		('BrandSettingsFile', 'citSettings.jsp')
+	))
+)
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/login-init-wait.jsp')
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efsonline/index-wait.jsp')
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efsonline/account-history-wait.jsp',
+	urlencode((
+		('SetAccountID', ACCOUNT_NUM),
+	))
+)
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www2.citizensbankonline.com/efs/servlet/efsonline/paged-account-history.jsp')
+auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+p = re.compile('.*Available Balance:[^$]*\$([0-9.,]+).*', re.DOTALL)
+balance = p.sub(r'\1', ''.join(data.fp.readlines())).replace(',', '')
+
+out = open(CB_TAB, 'w')
+out.write(balance + '\n')
+out.close()

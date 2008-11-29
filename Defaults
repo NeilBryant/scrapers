@@ -1,0 +1,188 @@
+rra  1dayAveExtended  AVERAGE:0.5:288:6000
+rra  1dayMaxExtended  MAX:0.5:288:6000
+
+target --default--
+	short-desc = ""
+	long-desc = ""
+	# you'll probably want to change this... unless you
+	# have Cricket in ~/cricket and your config tree in ~/cricket-config
+	util-dir = /usr/local/bin/scrapers
+	rra = "5minAve, 30minAve, 2hrAve, 2hrMax, 1dayAve, 1dayMax, 1dayAveExtended, 1dayMaxExtended"
+
+graph --default--
+	y-axis = "Dollars"
+	units = dollars
+
+
+datasource  AF-NONRET
+	ds-source = "exec:0:%util-dir%/af-cat af-nonret"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  CAPITAL_I
+	ds-source = "exec:0:%util-dir%/af-cat capital_i"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  CAPITAL_W
+	ds-source = "exec:0:%util-dir%/af-cat capital_w"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  THE_GROWT
+	ds-source = "exec:0:%util-dir%/af-cat the_growt"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  THE_INVES
+	ds-source = "exec:0:%util-dir%/af-cat the_inves"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  AF-ROTH
+	ds-source = "exec:0:%util-dir%/af-cat af-roth"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  THE_GROWT-ROTH
+	ds-source = "exec:0:%util-dir%/af-cat the_growt-roth"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  WASHINGTO-ROTH
+	ds-source = "exec:0:%util-dir%/af-cat washingto-roth"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  NEW_PERSP-ROTH
+	ds-source = "exec:0:%util-dir%/af-cat new_persp-roth"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+targetType  af
+	ds = "AF-NONRET, CAPITAL_I, CAPITAL_W, THE_GROWT, THE_INVES,
+	         AF-ROTH, THE_GROWT-ROTH, WASHINGTO-ROTH, NEW_PERSP-ROTH"
+	view = "Non-Retirement: AF-NONRET CAPITAL_I CAPITAL_W THE_GROWT THE_INVES,
+	        Roth: AF-ROTH THE_GROWT-ROTH WASHINGTO-ROTH NEW_PERSP-ROTH"
+
+graph AF-NONRET
+	legend = "AF - Non-Retirement"
+	draw-as = AREA
+
+graph CAPITAL_I
+	legend = "Capital Income Builder"
+	draw-as = AREA
+
+graph CAPITAL_W
+	legend = "Capital World Growth and Income"
+	draw-as = AREA
+
+graph THE_GROWT
+	legend = "The Growth Fund of America"
+	draw-as = AREA
+
+graph THE_INVES
+	legend = "The Investment Company of America"
+	draw-as = AREA
+
+graph AF-ROTH
+	legend = "AF - Roth IRA"
+	draw-as = AREA
+
+graph THE_GROWT-ROTH
+	legend = "The Growth Fund of America - Roth"
+	draw-as = AREA
+
+graph WASHINGTO-ROTH
+	legend = "Washington Mutual - Roth"
+	draw-as = AREA
+
+graph NEW_PERSP-ROTH
+	legend = "New Perspective Fund - Roth"
+	draw-as = AREA
+
+
+datasource  TRP-401K
+	ds-source = "exec:0:%util-dir%/trp-cat trp-401k"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  GROWTH_S
+	ds-source = "exec:0:%util-dir%/trp-cat growth_s"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  JP_MORGA
+	ds-source = "exec:0:%util-dir%/trp-cat jp_morga"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+datasource  PERSONAL
+	ds-source = "exec:0:%util-dir%/trp-cat personal"
+	desc = ""
+	rrd-ds-type = GAUGE
+
+targetType  trp
+	ds = "TRP-401K, GROWTH_S, JP_MORGA, PERSONAL"
+	view = "401(k): TRP-401K GROWTH_S JP_MORGA PERSONAL"
+
+graph TRP-401K
+	legend = "T. Rowe Price - Citizens 401(k)"
+	draw-as = AREA
+
+graph GROWTH_S
+	legend = "T. Rowe Price Growth Stock Fund"
+	draw-as = AREA
+
+graph JP_MORGA
+	legend = "J.P. Morgan Mid-Cap Value"
+	draw-as = AREA
+
+graph PERSONAL
+	legend = "T. Rowe Price Personal Strategy Growth"
+	draw-as = AREA
+
+
+
+datasource  TIPS_JUL2014
+	ds-source = "exec:0:cat /var/cache/cricket/tips-jul2014"
+	desc = "TIPS Holdings"
+	rrd-ds-type = GAUGE
+
+targetType  tips
+	ds = "TIPS_JUL2014"
+	view = "TIPS: TIPS_JUL2014"
+
+graph TIPS_JUL2014
+	legend = "TIPS - July 2014"
+	draw-as = AREA
+	y-min = 95
+	y-max = 105
+
+
+datasource  CB
+	ds-source = "exec:0:cat /var/cache/cricket/cb.tab"
+	desc = "Citizens Bank Accounts"
+	rrd-ds-type = GAUGE
+
+targetType  cb
+	ds = "CB"
+	view = "Green Checking: CB"
+
+graph CB
+	legend = "Citizens Bank Green Checking"
+	draw-as = AREA
+
+
+datasource  HSBC
+	ds-source = "exec:0:cat /var/cache/cricket/hsbc.tab"
+	desc = "HSBC Bank Accounts"
+	rrd-ds-type = GAUGE
+
+targetType  hsbc
+	ds = "HSBC"
+	view = "Online Savings: HSBC"
+
+graph HSBC
+	legend = "HSBC Online Savings"
+	draw-as = AREA

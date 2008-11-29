@@ -1,0 +1,102 @@
+Horde Financial Scrapers v1.0
+=============================
+
+The scripts in this distribution fetch account balance/value information
+from various financial web sites. Python, mechanize
+(http://wwwsearch.sourceforge.net/mechanize/), and BeautifulSoup
+(http://www.crummy.com/software/BeautifulSoup/) are required.
+
+Scrapers are included for:
+
+American Funds (americanfunds.com)
+Canandaigua National Bank & Trust (cnbank.com)
+Citizens Bank (Charter One in some markets) (citizensbank.com)
+HSBC (hsbc.com)
+Wall Street Journal Treasury Securities Information (wsj.com)
+T. Rowe Price 401(k) (rps.troweprice.com)
+
+
+Please note that these scrapers work for me, but may require modification to
+work in other situations (e.g., if you have multiple accounts with HSBC).
+
+
+Special Note for the Citizens Bank Scraper
+==========================================
+
+Citizens Bank has security measures that track which computers you use to
+visit their site. If you log into their online banking system from a new
+computer, it asks additional questions to verify your identity and sets a
+cookie so you aren't asked for this detailed information the next time you
+log in from that computer.
+
+The scraper does not attempt to deal with this situation. Therefore, you
+must set PMDATA at the top of the scraper to the value of the cookie that
+is set. For example, in Firefox's preferences, go to Privacy -> Show
+Cookies... and search for "citizensbank". Copy and paste the Content for the
+PMData cookie into the PMDATA configuration variable at the top of the
+scraper. If you do not perform this step, the scraper will not function.
+
+
+Please Be Polite
+================
+
+I've done my best to read the applicable agreements for each site; the
+agreements I've received with my accounts do not prohibit me from using
+software like this for the reasons I use it. Before using these scrapers,
+I strongly recommend reading the agreements you've been provided to
+determine whether they allow you to use these scrapers.
+
+Even when their use is allowed, please take care to be polite to these
+sites. Don't place undue load on them by running these scrapers every five
+minutes; run them a couple of times a day at most. Your graphs don't
+*really* need to be that up-to-date, right?
+
+
+Setup and Use
+=============
+
+I use these scrapers with Cricket (http://cricket.sourceforge.net/), but
+they are "compatible" with any monitoring software that can execute a
+command and read its output. By default, balances are stored in
+/var/cache/cricket, but this can be changed by modifying the *_TAB variables
+at the top of each scraper.
+
+I generally run them twice a day, around market open and after market close.
+For example:
+
+0 9,21 * * * trp; chgrp cricket /var/cache/cricket/trp.tab; chmod 640 /var/cache/cricket/trp.tab
+
+I also run the scrapers themselves as a dedicated user to avoid exposing
+login credentials to other accounts, such as the web server role account.
+This user is a member of the cricket group, so the tab files in
+/var/cache/cricket can be made readable to the cricket user. **UNDER NO
+CIRCUMSTANCES should the scraper be world-readable or readable by the user
+your monitoring software/web server run as.**
+
+For example, the T. Rowe Price scraper (trp) will run as a dedicated user
+(not cricket, www-data, httpd, or any other user, but a user created solely
+for running these scrapers) and Cricket will run trp-cat as the cricket user
+to fetch the data stored by trp.
+
+The included Defaults file configures Cricket to work with these scrapers.
+It also adds two RRA definitions so daily averages will be kept for ten
+years instead of Cricket's default of one year. The Defaults file must be
+modified for some of the scrapers (American Funds and T. Rowe Price in
+particular) to reflect the funds you hold in those accounts.
+
+
+Design Details
+==============
+
+Each scraper has two parts: the scraper itself that fetches data from the
+site and writes it to a file, and a script that emits the stored data from
+the file.
+
+This allows the scraper itself to run much less frequently than the
+monitoring software (Cricket, for example) polls for data; there's no need
+to poll for your balance information every five minutes, which is default
+Cricket behavior. It also enhances security, since permissions on the
+scraper (containing your authentication credentials) can be made much more
+restrictive, perhaps running as a dedicated user. Under no circumstances
+should the scraper be world-readable or readable by the user your monitoring
+software/web server run as.

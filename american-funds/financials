@@ -1,0 +1,3 @@
+target  af
+    short-desc = "American Funds"
+	target-type = "af"
