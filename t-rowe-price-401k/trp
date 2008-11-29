@@ -1,0 +1,95 @@
+#!/usr/bin/python -tt
+
+# T. Rowe Price 401(k) balance scraper v1.1
+# Copyright (c) 2007-8, John Morrissey <jwm@horde.net>
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of Version 2 of the GNU General Public License as
+# published by the Free Software Foundation
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+USERNAME = None
+PASSWORD = None
+PLAN_NUM = None
+TRP_TAB = '/var/cache/cricket/trp.tab'
+
+from getopt import gnu_getopt, GetoptError
+from os.path import basename
+import re
+import sys
+from urllib import urlencode
+from urllib2 import Request
+
+import mechanize
+
+def usage():
+	print 'T. Rowe Price 401(k) balance scraper v1.1'
+	print 'Usage: ' + basename(sys.argv[0]) + ' [-h|--help]'
+	print ''
+	print '    -h, --help                    display this help and exit'
+
+try:
+	options = gnu_getopt(sys.argv[1:], 'h', ['help'])
+except GetoptError, e:
+	print basename(sys.argv[0]) + ': ' + str(e)
+	usage()
+	sys.exit(1)
+
+for option in options[0]:
+	if option[0] == '-h' or option[0] == '--help':
+		usage()
+		sys.exit(0)
+
+if not USERNAME or not PASSWORD:
+	print 'You must edit %s to configure your username, password, and plan number.' % sys.argv[0]
+	sys.exit(1)
+
+
+auth = Request('https://www3.troweprice.com/mai/maiweb/base/goToLogin.do?jname=mrpmai&pdURL=/rps/mRP/login/login_success',
+	urlencode((
+		('source', 'mrpmai'),
+		('userName', USERNAME),
+	))
+)
+auth.add_header('User-Agent', 'T. Rowe Price 401(k) balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www3.troweprice.com/mai/maiweb/auth/authenticateUserAction.do?jname=mrpmai&pdURL=/rps/mRP/login/login_success',
+	urlencode((
+		('password', PASSWORD),
+	))
+)
+auth.add_header('User-Agent', 'T. Rowe Price 401(k) balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www3.troweprice.com/oam/oam/login.do?plnnum=' + PLAN_NUM)
+auth.add_header('User-Agent', 'T. Rowe Price 401(k) balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+
+auth = Request('https://www3.troweprice.com/oam/oam/balanceByInvestment.do')
+auth.add_header('User-Agent', 'T. Rowe Price 401(k) balance scraper v1.1')
+data = mechanize.urlopen(auth)
+
+response = ''.join(data.fp.readlines())
+
+out = open(TRP_TAB, 'w')
+# FIXME: use BeautifulSoup
+for name, balance in re.findall('prodPopUp\([^)]+\).*?([\w ]+).*?\$([\d,]+,\d{3}\.\d{2})', response, re.DOTALL):
+	out.write('%s %s\n' % (name.lower().replace(' ', '_')[:8], balance.replace(',', '')))
+out.write('%s %s\n' % (
+	'trp-401k',
+	re.findall('Total Account Balance.*?\$([\d,]+,\d{3}\.\d{2})',
+		response, re.DOTALL)[0].replace(',', '')
+))
+out.close()

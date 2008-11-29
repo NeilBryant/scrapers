@@ -1,0 +1,31 @@
+#!/usr/bin/python -tt
+
+TRP_TAB = "/var/cache/cricket/trp.tab";
+
+from getopt import gnu_getopt, GetoptError
+from os.path import basename
+import sys
+
+def usage():
+	print "trp-cat v1.0"
+	print "Usage: " + basename(sys.argv[0]) + " SYMBOL"
+	print ""
+	print "    -h, --help                    display this help and exit"
+	sys.exit(2)
+
+try:
+	options, args = gnu_getopt(sys.argv[1:], "h", ["help"])
+except GetoptError, e:
+	print basename(sys.argv[0]) + ": " + str(e)
+	usage()
+
+for option in options:
+	if option[0] == "-h" or option[0] == "--help":
+		usage()
+
+if len(args) != 1:
+	usage()
+
+tab = open(TRP_TAB, "r")
+print [line.split(" ")[1].replace("\n", "") for line in tab.readlines() if line.split(" ")[0] == args[0]][0]
+tab.close()
