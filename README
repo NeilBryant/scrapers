@@ -8,12 +8,15 @@ from various financial web sites. Python, mechanize
 
 Scrapers are included for:
 
+American Express (americanexpress.com)
 American Funds (americanfunds.com)
 Canandaigua National Bank & Trust (cnbank.com)
 Citizens Bank (Charter One in some markets) (citizensbank.com)
-HSBC (hsbc.com)
-Wall Street Journal Treasury Securities Information (wsj.com)
+HSBC (hsbcdirect.com)
+mypaystub.info
+T-Mobile (my.tmobile.com)
 T. Rowe Price 401(k) (rps.troweprice.com)
+Treasury Securities (using yahoo.com)
 
 
 Please note that these scrapers work for me, but may require modification to
