@@ -1,5 +1,5 @@
-Horde Financial Scrapers v1.0
-=============================
+Horde Financial Scrapers
+========================
 
 The scripts in this distribution fetch account balance/value information
 from various financial web sites. Python, mechanize
