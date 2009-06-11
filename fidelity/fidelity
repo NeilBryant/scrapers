@@ -1,0 +1,175 @@
+#!/usr/bin/python -tt
+
+# 401k.fidelity.com balance scraper
+# Copyright (c) 2009 Matthew J Ernisse <mernisse@ub3rgeek.net>
+# Copyright (c) 2009 John Morrissey <jwm@horde.net>
+#
+# Redistribution and use in source and binary forms,
+# with or without modification, are permitted provided
+# that the following conditions are met:
+#
+#    * Redistributions of source code must retain the
+#      above copyright notice, this list of conditions
+#      and the following disclaimer.
+#    * Redistributions in binary form must reproduce
+#      the above copyright notice, this list of conditions
+#      and the following disclaimer in the documentation
+#      and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+# TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+# USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# $Id$
+
+import logging
+import os
+import re
+import sys
+from urllib2 import HTTPError
+
+from BeautifulSoup import BeautifulSoup
+import mechanize
+
+# Your username and password for 401k.fidelity.com. This script should be
+# owner-readable ONLY due to the cleartext credentials. This script DOES NOT
+# check, it is up to YOU.
+CUSTOMER_ID = ''
+PIN = ''
+
+# This e-mail address will be appended to the User-Agent header, so
+# the site can contact you about your scraping if they so desire.
+OWNER = ''
+
+# By default, store the RRD file in the same directory as this script.
+RRD = '%s/fidelity-balance.rrd' % os.path.dirname(sys.argv[0])
+# Keep this many years of data in the RRD.
+RRD_KEEP_LENGTH = 3
+
+# Set this to a filename if you want to write a tab file instead of
+# creating/updating an RRD. The file format is compatible with the
+# T. Rowe Price (trp) scraper by John Morrissey <jwm@horde.net>.
+TAB = ''
+
+PROXY = ''
+
+DEBUG = False
+
+
+if not CUSTOMER_ID or not PIN or not OWNER or \
+   not (RRD or TAB) or (RRD and not RRD_KEEP_LENGTH):
+	sys.exit('Please edit %s and follow the directions in the comments.' %
+		sys.argv[0])
+
+host = '401k.fidelity.com'
+start_page = 'https://%s/public/content/401k/Home/Landing/' % host
+
+br = mechanize.Browser()
+br.set_handle_robots(False)
+br.set_handle_refresh(True, 10, True)
+br.set_handle_redirect(True)
+br.addheaders = [
+	('User-agent',
+		'Mozilla/5.0 (X11; U; Linux i686; en-US; rv 1.0) %s' % OWNER),
+]
+if PROXY:
+	br.set_proxies({
+		'http': PROXY,
+		'https': PROXY,
+	})
+
+if DEBUG:
+	br.set_debug_http(True)
+	br.set_debug_responses(True)
+	br.set_debug_redirects(True)
+	logger = logging.getLogger('mechanize')
+	logger.addHandler(logging.StreamHandler(sys.stdout))
+	logger.setLevel(logging.DEBUG)
+
+try:
+	br.open(start_page)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for login page, has %s changed?' % host)
+try:
+	br.select_form('NbFrmPoster')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate login form, has %s changed?' % host)
+
+# The form action is set by some validation JavaScript, so we have to
+# blindly set it ourselves.
+br.form.action = 'https://login.fidelity.com/ftgw/Fidelity/NBPart/Login/Response'
+br.form.set_all_readonly(False)
+br['ssn'] = CUSTOMER_ID
+br['pin'] = PIN
+
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+
+r = br.open('https://workplaceservices100.fidelity.com/netbenefits/navstation/homepage/home')
+soup = BeautifulSoup(r.get_data())
+
+try:
+	total = soup.find(attrs={'id' : 'balance0'}).strong.string
+except:
+	sys.exit('Unable to locate balance, has %s changed?' % host)
+total = total.strip().replace('$', '').replace(',', '')
+
+balances = {}
+for balance in soup.findAll(attrs={'id' : re.compile('^positionsBalance\d+$')}):
+	investment = balance.parent
+	while investment:
+		if investment.name != 'td':
+			investment = investment.parent
+			continue
+
+		balance = balance.string.strip().replace('$', '').replace(',', '')
+		try:
+			balances[investment.findPreviousSibling(
+				attrs={'scope': 'row'}).a.string] = balance
+		except:
+			sys.exit('Unable to retrieve investment name for balance %s, has %s changed?' % (balance, host))
+		break
+
+if not balances:
+	sys.exit('Unable to retrieve any investment balances, has %s changed?' % host)
+
+if TAB:
+	fd = open(TAB, 'w')
+
+	fd.write('trp-401k %s\n' % total)
+	for investment, balance in balances.iteritems():
+		fd.write('%s %s\n' % (
+			investment.lower().replace(' ', '_')[:8], balance
+		))
+
+	fd.close()
+	sys.exit(0)
+
+from rrdtool import *
+rrd = RoundRobinDatabase(RRD)
+
+if not os.path.exists(RRD):
+	update_every = 4 * 60 * 60
+	keep_rows = RRD_KEEP_LENGTH * 365 * (24 / update_every)
+	rrd.create(
+		DataSource('balance', type=GaugeDST, heartbeat=update_every,
+			min='0', max='100000000'),
+		RoundRobinArchive(cf=LastCF, xff=0, steps=1, rows=keep_rows),
+		step=7200)
+try:
+	rrd.update(Val(total), t=['balance'])
+except Exception, e:
+	sys.exit('Unable to update RRD %s: %s' % (RRD, str(e)))

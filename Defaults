@@ -102,44 +102,44 @@ graph NEW_PERSP-ROTH
 	draw-as = AREA
 
 
-datasource  TRP-401K
-	ds-source = "exec:0:%util-dir%/trp-cat trp-401k"
+datasource  FIDELITY-401K
+	ds-source = "exec:0:%util-dir%/fidelity-cat trp-401k"
 	desc = ""
 	rrd-ds-type = GAUGE
 
-datasource  GROWTH_S
-	ds-source = "exec:0:%util-dir%/trp-cat growth_s"
+datasource  AF_GRTH_
+	ds-source = "exec:0:%util-dir%/fidelity-cat af_grth_"
 	desc = ""
 	rrd-ds-type = GAUGE
 
-datasource  JP_MORGA
-	ds-source = "exec:0:%util-dir%/trp-cat jp_morga"
+datasource  JPM_MIDC
+	ds-source = "exec:0:%util-dir%/fidelity-cat jpm_midc"
 	desc = ""
 	rrd-ds-type = GAUGE
 
-datasource  PERSONAL
-	ds-source = "exec:0:%util-dir%/trp-cat personal"
+datasource  VANG_LIF
+	ds-source = "exec:0:%util-dir%/fidelity-cat vang_lif"
 	desc = ""
 	rrd-ds-type = GAUGE
 
-targetType  trp
-	ds = "TRP-401K, GROWTH_S, JP_MORGA, PERSONAL"
-	view = "401(k): TRP-401K GROWTH_S JP_MORGA PERSONAL"
+targetType  fidelity
+	ds = "FIDELITY-401K, AF_GRTH_, JPM_MIDC, VANG_LIF"
+	view = "401(k): FIDELITY-401K AF_GRTH_ JPM_MIDC VANG_LIF"
 
-graph TRP-401K
-	legend = "T. Rowe Price - Citizens 401(k)"
+graph FIDELITY-401K
+	legend = "Fidelity - Citizens 401(k)"
 	draw-as = AREA
 
-graph GROWTH_S
-	legend = "T. Rowe Price Growth Stock Fund"
+graph AF_GRTH_
+	legend = "Growth Fund of America"
 	draw-as = AREA
 
-graph JP_MORGA
+graph JPM_MIDC
 	legend = "J.P. Morgan Mid-Cap Value"
 	draw-as = AREA
 
-graph PERSONAL
-	legend = "T. Rowe Price Personal Strategy Growth"
+graph VANG_LIF
+	legend = "Vanguard LifeStrategy Growth "
 	draw-as = AREA
 
 
