@@ -1,0 +1,234 @@
+#!/usr/bin/python -tt
+
+# AT&T Wireless Online Account Management scraper
+# Copyright (c) 2008-9, John Morrissey <jwm@horde.net>
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of Version 2 of the GNU General Public License as
+# published by the Free Software Foundation
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+# Your AT&T wireless phone number.
+PHONE_NUMBER = ''
+# Your password for www.wireless.att.com.
+PASSWORD = ''
+
+# This e-mail address will be appended to the User-Agent header, so
+# the site can contact you about your scraping if they so desire.
+OWNER = ''
+
+PROXY = ''
+
+DEBUG = False
+
+from getopt import gnu_getopt, GetoptError
+import logging
+import os
+import re
+import sys
+from urllib2 import HTTPError
+
+from BeautifulSoup import BeautifulSoup
+import mechanize
+
+def usage():
+	print 'AT&T Wireless Online Account Management scraper'
+	print 'Usage: ' + os.path.basename(sys.argv[0]) + ' [-D|--skip-detail] [-h|--help] [-l|--list] [-s|--summary] DATE'
+	print ''
+	print '    -D, --skip-detail  omit detail when retrieving full bill'
+	print '    -h, --help         display this help and exit'
+	print '    -l, --list         list available bill dates'
+	print '    -s, --summary      display account summary'
+
+try:
+	options, when = gnu_getopt(sys.argv[1:], 'Dhls',
+		['skip-detail', 'help', 'list', 'summary'])
+except GetoptError, e:
+	print os.path.basename(sys.argv[0]) + ': ' + str(e)
+	usage()
+	sys.exit(1)
+
+LIST_ALL = False
+SKIP_DETAIL = False
+SUMMARY = False
+for option in options:
+	if option[0] == '-D' or option[0] == '--skip-detail':
+		SKIP_DETAIL = True
+	elif option[0] == '-h' or option[0] == '--help':
+		usage()
+		sys.exit(1)
+	elif option[0] == '-l' or option[0] == '--list':
+		LIST_ALL = True
+	elif option[0] == '-s' or option[0] == '--summary':
+		SUMMARY = True
+
+if not PHONE_NUMBER or not PASSWORD or not OWNER:
+	sys.exit('Please edit %s and follow the directions in the comments.' %
+		sys.argv[0])
+
+if LIST_ALL and len(when) > 0:
+	usage()
+	sys.exit(1)
+if SUMMARY and (LIST_ALL or SKIP_DETAIL or len(when) > 0):
+	usage()
+	sys.exit(1)
+
+if len(when) > 1:
+	usage()
+	sys.exit(1)
+
+host = 'www.wireless.att.com'
+
+br = mechanize.Browser()
+br.set_handle_robots(False)
+br.set_handle_refresh(True, 10, True)
+br.set_handle_redirect(True)
+br.addheaders = [
+	('User-agent',
+		'Mozilla/5.0 (X11; U; Linux i686; en-US; rv 1.0) %s' % OWNER),
+]
+if PROXY:
+	br.set_proxies({
+		'http': PROXY,
+		'https': PROXY,
+	})
+
+if DEBUG:
+	br.set_debug_http(True)
+	br.set_debug_responses(True)
+	br.set_debug_redirects(True)
+	logger = logging.getLogger('mechanize')
+	logger.addHandler(logging.StreamHandler(sys.stdout))
+	logger.setLevel(logging.DEBUG)
+
+try:
+	br.open('https://%s/olam/loginAction.doview' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for login page, has %s changed?' % host)
+
+
+try:
+	br.select_form('loginActionForm')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate login form, has %s changed?' % host)
+
+br['wireless_num'] = PHONE_NUMBER
+br['pass'] = PASSWORD
+
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for login verification intermediate page, has %s changed?' % host)
+
+
+try:
+	br.select_form('loginInProgressForm')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate login form, has %s changed?' % host)
+
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve summary page, has %s changed?' % host)
+
+
+if SUMMARY:
+	soup = BeautifulSoup(r.get_data())
+
+	for section in soup.findAll('dl', attrs={'class': 'usage'}):
+		type = section.find('dt').string
+		if 'Minutes' in type:
+			usage = re.sub(r'^\s*Used\s+([\d,]+)\s+of\s+([\d,]+)\s*$', r'\1/\2',
+				str(section.find(text=re.compile(r'^\s*Used\s+[\d,]+\s+of\s+[\d,]+\s*$'))))
+			print '%s: %s' % (type, usage)
+		elif type == 'Rollover Summary':
+			text = str(section.find('dd'))
+			have = re.sub(r'.*You have ([\d,]+).*', r'\1', text)
+			expiring = re.sub(r'.*([\d,]+) minutes to expire on ([\d/]+).*',
+				r'\1 expire on \2', text)
+			print '%s: %s, %s' % (type, have, expiring)
+		elif type == 'Next Bill Cycle':
+			print '%s: %s' % (type, section.find('dd').string)
+
+	sys.exit(0)
+
+
+try:
+	r = br.open('https://%s/view/billPayCombBillReflectionAction.doview?reportActionEvent=A_VIEW_AFFILIATE_WIRELESS_CALL_DETAILS' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for bill summary page, has %s changed?' % host)
+
+
+try:
+	br.select_form('billEngineForm')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate bill selection form, has %s changed?' % host)
+
+if LIST_ALL:
+	for item in br.form.find_control('billDate').items:
+		print '%s: %s' % (item.name, item.attrs['label'])
+		sys.exit(0)
+
+if when:
+	for item in br.form.find_control('billDate').items:
+		if when[0] == item.attrs['label']:
+			when[0] = item.name
+			break
+		elif item.attrs['label'].endswith(' - %s' % when[0]):
+			when[0] = item.name
+			break
+		elif when[0] == item.name:
+			break
+	else:
+		sys.exit('No bill is available for %s.' % when[0])
+	br['billDate'] = when
+
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve summary page, has %s changed?' % host)
+
+try:
+	r = br.open('https://%s/pmt/jsp/mypayment/viewbill/viewFullBill.jsp?reportActionEvent=A_VIEW_VFB' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for bill summary page, has %s changed?' % host)
+
+soup = BeautifulSoup(r.get_data())
+
+# Remove the help links that we won't have images for
+for helpLink in soup.findAll('a', attrs={'name': 'useBubbleToolTip'}):
+	helpLink.extract()
+
+# Remove call and data detail if requested.
+if SKIP_DETAIL:
+	for node in soup.findAll('h2'):
+		if 'Call Detail' in str(node.string) or 'Data Detail' in str(node.string):
+			while node.parent:
+				if node.parent.name == 'table':
+					node.parent.extract()
+					break
+				node = node.parent
+
+# Put AT&T's JavaScript into "local disk" mode, which makes the page render
+# a bit nicer when only the HTML (and not images) is available.
+print re.sub(r"""\s+local_disk\s*=\s*["']N["']""", 'local_disk="Y"', str(soup))
