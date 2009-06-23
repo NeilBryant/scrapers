@@ -183,7 +183,7 @@ except mechanize.FormNotFoundError:
 if LIST_ALL:
 	for item in br.form.find_control('billDate').items:
 		print '%s: %s' % (item.name, item.attrs['label'])
-		sys.exit(0)
+	sys.exit(0)
 
 if when:
 	for item in br.form.find_control('billDate').items:
