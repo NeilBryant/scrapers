@@ -1,7 +1,7 @@
 #!/usr/bin/python -tt
 
-# HSBC account balance scraper v1.1
-# Copyright (c) 2007-8, John Morrissey <jwm@horde.net>
+# HSBC account balance scraper v2.0
+# Copyright (c) 2007-9, John Morrissey <jwm@horde.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of Version 2 of the GNU General Public License as
@@ -16,33 +16,54 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-ACCOUNT_NUM = None
-ACCOUNT_PASS = None
-ACCOUNT_PASS2 = None
-# The name of the account as it appears in the Account Summary page.
-ACCOUNT_NAME = None
-HSBC_TAB = '/var/cache/cricket/hsbc.tab'
-
 from getopt import gnu_getopt, GetoptError
-from os.path import basename
+import logging
+import os
 import re
 import sys
-from urllib import urlencode
-from urllib2 import Request
+from urllib2 import HTTPError
 
 from BeautifulSoup import BeautifulSoup
 import mechanize
 
+# Your account number and passwords for hsbcdirect.com. This script should
+# be owner-readable ONLY due to the cleartext credentials. This script DOES
+# NOT check, it is up to YOU.
+ACCOUNT_NUM = ''
+ACCOUNT_PASS = ''
+ACCOUNT_PASS2 = ''
+
+# The name of the account as it appears in the Account Summary page.
+ACCOUNT_NAME = 'ONLINE SAVINGS'
+
+# This e-mail address will be appended to the User-Agent header, so
+# the site can contact you about your scraping if they so desire.
+OWNER = ''
+
+# By default, store the RRD file in the same directory as this script.
+RRD = '%s/fidelity-balance.rrd' % os.path.dirname(sys.argv[0])
+# Keep this many years of data in the RRD.
+RRD_KEEP_LENGTH = 3
+
+# Set this to a filename if you want to write a tab file instead of
+# creating/updating an RRD.
+TAB = ''
+
+PROXY = ''
+
+DEBUG = False
+
+
 def usage():
-	print 'HSBC account balance scraper v1.1'
-	print 'Usage: %s [-h|--help]' % basename(sys.argv[0])
+	print 'HSBC account balance scraper v2.0'
+	print 'Usage: %s [-h|--help]' % os.path.basename(sys.argv[0])
 	print ''
 	print '    -h, --help                    display this help and exit'
 
 try:
 	options = gnu_getopt(sys.argv[1:], 'h', ['help'])[0]
 except GetoptError, e:
-	print basename(sys.argv[0]) + ': ' + str(e)
+	print os.path.basename(sys.argv[0]) + ': ' + str(e)
 	usage()
 	sys.exit(1)
 
@@ -51,39 +72,130 @@ for option in options:
 		usage()
 		sys.exit(0)
 
-if not ACCOUNT_NUM or not ACCOUNT_PASS or not ACCOUNT_PASS2:
-	print 'You must edit %s to configure your account number and passwords.' % sys.argv[0]
-	sys.exit(1)
+if not ACCOUNT_NUM or not ACCOUNT_PASS or not ACCOUNT_PASS2 or not OWNER or \
+   not (RRD or TAB) or (RRD and not RRD_KEEP_LENGTH):
+	sys.exit('Please edit %s and follow the directions in the comments.' %
+		sys.argv[0])
+
+host = 'www.hsbcdirect.com'
+
+br = mechanize.Browser()
+br.set_handle_robots(False)
+br.set_handle_refresh(True, 10, True)
+br.set_handle_redirect(True)
+br.addheaders = [
+	('User-agent',
+		'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.5; en-US; rv:1.9.1.1) Gecko/20090715 Firefox/3.5.1 %s' % OWNER),
+]
+if PROXY:
+	br.set_proxies({
+		'http': PROXY,
+		'https': PROXY,
+	})
+
+if DEBUG:
+	br.set_debug_http(True) 
+	br.set_debug_responses(True)
+	br.set_debug_redirects(True)
+	logger = logging.getLogger('mechanize')
+	logger.addHandler(logging.StreamHandler(sys.stdout))
+	logger.setLevel(logging.DEBUG)
 
 
-auth = Request('https://www.hsbcdirect.com/1/2/?idv_cmd=idv.Authentication',
-	urlencode((
-		('userid', ACCOUNT_NUM),
-		('nextPage', 'hsbc.pib.view-accounts.post-reg'),
-	))
-)
-auth.add_header('User-Agent', 'HSBC account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+try:
+	br.open('https://%s/1/2/1/logon' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for login page, has %s changed?' % host)
+
+try:
+	br.select_form('ibLogonForm')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate login form, has %s changed?' % host)
+
+br['userid'] = ACCOUNT_NUM
+
+# hsbcdirect.com sets an empty domain for a critical cookie and is therefore
+# not RFC 2965 compliant:
+#
+#   3.3.2  Rejecting Cookies  To prevent possible security or privacy
+#   violations, a user agent rejects a cookie according to rules below. The
+#   goal of the rules is to try to limit the set of servers for which a
+#   cookie is valid, based on the values of the Path, Domain, and Port
+#   attributes and the request-URI, request-host and request-port.
+#   [...]
+#      *  The value for the Domain attribute contains no embedded dots,
+#         and the value is not .local.
+#
+# Without this cookie, the login process breaks, so kludge around this
+# by looking for cookies with empty domains and explicitly setting them.
+for cookie in br.response().info()['Set-Cookie'].split(', '):
+	if re.search(r';\s*Domain\s*=\s*;', cookie):
+		br.set_cookie(re.sub(r';\s*Domain\s*=\s*;',
+			';Domain=.hsbcdirect.com;', cookie))
+
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for password verification page, has %s changed?' % host)
+
+try:
+	br.select_form('inputForm')
+except mechanize.FormNotFoundError:
+    sys.exit('Unable to locate login form, has %s changed?' % host)
+
+br['memorableAnswer'] = ACCOUNT_PASS
+for control in br.form.controls:
+	if control.name == 'password':
+		control.value = ACCOUNT_PASS2
+		break
+else:
+	sys.exit('Unable to find ACCOUNT_PASS2 field, has %s changed?' % host)
+
+try:
+	r = br.submit()
+except HTTPError, e:
+    sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+    sys.exit('Unable to retrieve summary page, has %s changed?' % host)
 
 
-auth = Request('https://www.hsbcdirect.com/1/2/?idv_cmd=idv.Authentication',
-	urlencode((
-		('memorableAnswer', ACCOUNT_PASS),
-		('password', ACCOUNT_PASS2),
-	))
-)
-auth.add_header('User-Agent', 'HSBC account balance scraper v1.1')
-data = mechanize.urlopen(auth)
 
+try:
+	r = br.open('https://%s/1/2/3/personal/online-services/personal-internet-banking/view-accounts/account-summary?isUrlRedirect=yes&urlRedirectCommand=cmd_AccountSummary' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for summary page, has %s changed?' % host)
 
-auth = Request('https://www.hsbcdirect.com/1/2/3/personal/online-services/personal-internet-banking/view-accounts/account-summary?isUrlRedirect=yes&urlRedirectCommand=cmd_AccountSummary')
-auth.add_header('User-Agent', 'HSBC account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+soup = BeautifulSoup(r.get_data())
+try:
+	balance = soup.find(text=ACCOUNT_NAME).findParent(name='tr').\
+		find(text=re.compile(r'\$([0-9,]+\.[0-9]{2})'))
+except:
+	sys.exit('Unable to retrieve balance, has %s changed?' % host)
 
-soup = BeautifulSoup(''.join(data.fp.readlines()))
-balance = soup.find(text = ACCOUNT_NAME).findParent(name = 'tr').\
-	find(text = re.compile(r'\$([0-9,]+\.[0-9]{2})'))
+if TAB:
+	out = open(TAB, 'w')
+	out.write(balance.replace('$', '').replace(',', '') + '\n')
+	out.close()
+	sys.exit(0)
 
-out = open(HSBC_TAB, 'w')
-out.write(balance.replace('$', '').replace(',', '') + '\n')
-out.close()
+from rrdtool import *
+rrd = RoundRobinDatabase(RRD)
+
+if not os.path.exists(RRD):
+	update_every = 4 * 60 * 60
+	keep_rows = RRD_KEEP_LENGTH * 365 * (24 / update_every)
+	rrd.create(
+		DataSource('balance', type=GaugeDST, heartbeat=update_every,
+			min='0', max='100000000'),
+		RoundRobinArchive(cf=LastCF, xff=0, steps=1, rows=keep_rows),
+		step=7200)
+try:
+	rrd.update(Val(total), t=['balance'])
+except Exception, e:
+	sys.exit('Unable to update RRD %s: %s' % (RRD, str(e)))
