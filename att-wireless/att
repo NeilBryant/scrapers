@@ -139,7 +139,10 @@ except mechanize.FormNotFoundError:
 	sys.exit('Unable to locate login form, has %s changed?' % host)
 
 try:
-	r = br.submit()
+	# Sadly, AT&T's site now uses JavaScript to perform this
+	# redirection. Rather than trying to parse the JavaScript
+	# ourselves, just blindly redirect to the URL it uses.
+	br.open('https://%s/olam/authenticateAction.olamexecute?actionEvent=authenticate&fromPage=&target=&pId=&reportActionEvent=A_LGN_LOGIN_SUB' % host)
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
