@@ -102,7 +102,7 @@ except HTTPError, e:
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for login page, has %s changed?' % host)
 try:
-	br.select_form('NbFrmPoster')
+	br.select_form('loginForm')
 except mechanize.FormNotFoundError:
 	sys.exit('Unable to locate login form, has %s changed?' % host)
 
