@@ -163,9 +163,12 @@ if not br.viewing_html():
 	sys.exit('Unable to retrieve summary page, has %s changed?' % host)
 
 try:
-	br.select_form('PC_7_1_CSK_VerifyEmailCheckForm')
+	for form in br.forms():
+		if re.search(r'^PC_[\d_]+_CSK_VerifyEmailCheckForm$', form.name):
+			br.select_form(form.name)
+			break
 except mechanize.FormNotFoundError:
-	sys.exit('Unable to locate password form, has %s changed?' % host)
+	sys.exit('Unable to locate account summary redirect form, has %s changed?' % host)
 
 # The form action is set by some validation JavaScript, so we have to
 # blindly set it ourselves.
