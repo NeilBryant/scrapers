@@ -1,7 +1,7 @@
-#!/usr/bin/python -tt
+#!/usr/bin/python
 
-# Citizens Bank account balance scraper v1.1
-# Copyright (c) 2007-8, John Morrissey <jwm@horde.net>
+# Citizens Bank account balance scraper
+# Copyright (c) 2007-9, John Morrissey
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of Version 2 of the GNU General Public License as
@@ -16,31 +16,61 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-USERNAME = None
-PASSWORD = None
-ACCOUNT_NUM = None
-PMDATA = None
-CB_TAB = '/var/cache/cricket/cb.tab'
-
 from getopt import gnu_getopt, GetoptError
-import mechanize
-from os.path import basename
+import logging
+import os
 import re
 import sys
 from time import time
-from urllib import urlencode
-from urllib2 import Request
+from urllib2 import HTTPError
+from urlparse import urlparse
+
+from BeautifulSoup import BeautifulSoup
+import mechanize
+
+# Your username and password for citizensbankonline.com. This script should
+# be owner-readable ONLY due to the cleartext credentials. This script DOES
+# NOT check, it is up to YOU.
+USERNAME = ''
+PASSWORD = ''
+
+# The name of the account as it appears in the Account Summary page.
+ACCOUNT_NAME = ''
+
+# The identity verification questions you selected when signing up
+# for Citizens Bank online access.
+VERIFICATION_QUESTIONS = {
+	'QUESTION': 'ANSWER',
+}
+
+# This e-mail address will be appended to the User-Agent header, so
+# the site can contact you about your scraping if they so desire.
+OWNER = ''
+
+# By default, store the RRD file in the same directory as this script.
+RRD = '%s/citizens-balance.rrd' % os.path.dirname(sys.argv[0])
+# Keep this many years of data in the RRD.
+RRD_KEEP_LENGTH = 3
+
+# Set this to a filename if you want to write a tab file instead of
+# creating/updating an RRD.
+TAB = '/var/cache/cricket/cb.tab'
+
+PROXY = ''
+
+DEBUG = False
+
 
 def usage():
-	print 'Citizens Bank account balance scraper v1.1'
-	print 'Usage: %s [-h|--help]' % basename(sys.argv[0])
+	print 'Citizens Bank account balance scraper v2.0'
+	print 'Usage: %s [-h|--help]' % os.path.basename(sys.argv[0])
 	print ''
 	print '    -h, --help                    display this help and exit'
 
 try:
 	options = gnu_getopt(sys.argv[1:], 'h', ['help'])[0]
 except GetoptError, e:
-	print basename(sys.argv[0]) + ': ' + str(e)
+	print os.path.basename(sys.argv[0]) + ': ' + str(e)
 	usage()
 	sys.exit(1)
 
@@ -49,84 +79,236 @@ for option in options:
 		usage()
 		sys.exit(0)
 
-if not USERNAME or not PASSWORD or not ACCOUNT_NUM or not PMDATA:
-	print 'You must edit %s to configure your username, password, account number, and PMData cookie.' % sys.argv[0]
-	sys.exit(1)
+if not USERNAME or not PASSWORD or not ACCOUNT_NAME or not OWNER or \
+   not (RRD or TAB) or (RRD and not RRD_KEEP_LENGTH):
+	sys.exit('Please edit %s to configure your username, password, and account number.' %
+		sys.argv[0])
 
-jar = mechanize.CookieJar()
-jar.set_cookie(mechanize.Cookie(
-	None,
-	'PMData', PMDATA, None, False,
-	'.citizensbankonline.com', True, True,
-	'/efs/servlet', True, True,
-	int(time()) + 86400, False, None, None, None
-))
+host = 'www.citizensbankonline.com'
 
+br = mechanize.Browser()
+br.set_handle_robots(False)
+br.set_handle_refresh(True, 10, True)
+br.set_handle_redirect(True)
+br.addheaders = [
+	('User-agent',
+		'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.5; en-US; rv:1.9.1.2) Gecko/20090729 Firefox/3.5.2')
+]
+if PROXY:
+	br.set_proxies({
+		'http': PROXY,
+		'https': PROXY,
+	})
 
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/wait.jsp?target=default.jsp',
-	urlencode((
-		('UserID', USERNAME),
-	))
-)
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
-
-
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/loginnew-wait.jsp')
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
-
-
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/sendit.jsp',
-	urlencode((
-		('pmdata', PMDATA),
-	))
-)
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+if DEBUG:
+	br.set_debug_http(True) 
+	br.set_debug_responses(True)
+	br.set_debug_redirects(True)
+	logger = logging.getLogger('mechanize')
+	logger.addHandler(logging.StreamHandler(sys.stdout))
+	logger.setLevel(logging.DEBUG)
 
 
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/login-rsa-wait.jsp?detect=3')
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+try:
+	br.open('https://%s/banking/login.asp?l=2' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for login page, has %s changed?' % host)
 
+try:
+	br.select_form('SignOn')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate username form, has %s changed?' % host)
 
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/wait.jsp?target=login-init-wait.jsp',
-	urlencode((
-		('Password', PASSWORD),
-		('BrandSettingsFile', 'citSettings.jsp')
-	))
-)
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+br['UserID'] = USERNAME
 
+host = urlparse(br.form.action)[1]
 
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efs/login-init-wait.jsp')
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve post-username intermediate page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
 
+#try:
+#	br.open('https://%s/efs/servlet/efs/default.jsp' % host)
+#except HTTPError, e:
+#	sys.exit('%d %s' % (e.code, e.msg))
+#if not br.viewing_html():
+#	sys.exit('Unable to retrieve HTML for second post-username intermediate page, has %s changed?' % host)
+#host = urlparse(r.geturl())[1]
 
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efsonline/index-wait.jsp')
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+try:
+	br.open('https://%s/efs/servlet/efs/loginnew-wait.jsp' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for host transfer page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
 
+try:
+	br.select_form('login')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate identity check form, has %s changed?' % host)
 
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efsonline/account-history-wait.jsp',
-	urlencode((
-		('SetAccountID', ACCOUNT_NUM),
-	))
-)
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+host = urlparse(br.form.action)[1]
 
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve post-host transfer intermediate page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
 
-auth = Request('https://www2.citizensbankonline.com/efs/servlet/efsonline/paged-account-history.jsp')
-auth.add_header('User-Agent', 'Citizens Bank account balance scraper v1.1')
-data = mechanize.urlopen(auth)
+try:
+	r = br.open('https://%s/efs/servlet/efs/loginnew-wait.jsp' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve second post-host transfer intermediate page page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
 
-p = re.compile('.*Available Balance:[^$]*\$([0-9.,]+).*', re.DOTALL)
-balance = p.sub(r'\1', ''.join(data.fp.readlines())).replace(',', '')
+soup = BeautifulSoup(r.get_data())
+refresh = soup.find('meta', attrs={'http-equiv': 'refresh'})
+url = re.sub(r'.*url=([^;]+)($|;)', r'\1', refresh['content'])
 
-out = open(CB_TAB, 'w')
-out.write(balance + '\n')
-out.close()
+try:
+	r = br.open(url)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for third post-host transfer intermediate page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
+
+try:
+	r = br.open('https://%s/efs/servlet/efs/login-rsa-wait.jsp' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for password/identity verification page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
+
+if 'login-questions.jsp' in r.get_data():
+	try:
+		r = br.open('https://%s/efs/servlet/efs/login-questions.jsp' % host)
+	except HTTPError, e:
+		sys.exit('%d %s' % (e.code, e.msg))
+	if not br.viewing_html():
+		sys.exit('Unable to retrieve HTML for identity verification page, has %s changed?' % host)
+
+	try:
+		br.select_form('CheckQuestion')
+	except mechanize.FormNotFoundError:
+		sys.exit('Unable to locate identity verification question form, has %s changed?' % host)
+
+	soup = BeautifulSoup(r.get_data())
+
+	br['Register'] = ['1']
+	question = soup.find(id='question').findParent('tr').\
+		findPreviousSibling('tr').find(text=re.compile(r'\?'))
+	question = re.sub(r'\?.*', '?', question)
+	if question not in VERIFICATION_QUESTIONS:
+		sys.exit('Unknown identity verification question: %s' % question)
+	br['Response'] = VERIFICATION_QUESTIONS[question]
+
+	try:
+		r = br.submit()
+	except HTTPError, e:
+		sys.exit('%d %s' % (e.code, e.msg))
+	if not br.viewing_html():
+		sys.exit('Unable to retrieve post-identity verification password page, has %s changed?' % host)
+	host = urlparse(r.geturl())[1]
+
+try:
+	br.select_form('SignOn')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate password form, has %s changed?' % host)
+
+br['Password'] = PASSWORD
+
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve post-password intermediate page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
+
+try:
+	r = br.open('https://%s/efs/servlet/efs/login-init-wait.jsp' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for second post-password intermediate page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
+
+# Fetching this URL isn't necessary for the login process to complete,
+# but we'll leave it here in case that changes or we decide to more
+# closely imitate a browser.
+#try:
+#	r = br.open('https://%s/efs/servlet/efs/login-init2.jsp' % host)
+#except HTTPError, e:
+#	sys.exit('%d %s' % (e.code, e.msg))
+#if not br.viewing_html():
+#	sys.exit('Unable to retrieve HTML for password verification page, has %s changed?' % host)
+#host = urlparse(r.geturl())[1]
+
+try:
+	r = br.open('https://%s/efs/servlet/efs/login-init3.jsp' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for third post-password intermediate page, has %s changed?' % host)
+host = urlparse(r.geturl())[1]
+
+# Fetching this URL isn't necessary for the login process to complete,
+# but we'll leave it here in case that changes or we decide to more
+# closely imitate a browser.
+#try:
+#	r = br.open('https://%s/efs/servlet/efsonline/index-wait.jsp' % host)
+#except HTTPError, e:
+#	sys.exit('%d %s' % (e.code, e.msg))
+#if not br.viewing_html():
+#	sys.exit('Unable to retrieve HTML for password verification page, has %s changed?' % host)
+#host = urlparse(r.geturl())[1]
+
+try:
+	r = br.open('https://%s/efs/servlet/efsonline/index.jsp' % host)
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for account summary page, has %s changed?' % host)
+
+soup = BeautifulSoup(r.get_data())
+try:
+	balance = soup.find(text=ACCOUNT_NAME).findParent('td').\
+		findNext(text=re.compile(r'\$[0-9.,]+')).strip()
+	balance = re.sub(r'[$,]', '', balance)
+except:
+	sys.exit('Unable to retrieve balance for %s account, has %s changed?' % (ACCOUNT_NAME, host))
+
+if TAB:
+	out = open(TAB, 'w')
+	out.write(balance + '\n')
+	out.close()
+	sys.exit(0)
+
+from rrdtool import *
+rrd = RoundRobinDatabase(RRD)
+
+if not os.path.exists(RRD):
+	update_every = 4 * 60 * 60
+	keep_rows = RRD_KEEP_LENGTH * 365 * (24 / update_every)
+	rrd.create(
+		DataSource('balance', type=GaugeDST, heartbeat=update_every,
+			min='0', max='100000000'),
+		RoundRobinArchive(cf=LastCF, xff=0, steps=1, rows=keep_rows),
+		step=7200)
+try:
+	rrd.update(Val(total), t=['balance'])
+except Exception, e:
+	sys.exit('Unable to update RRD %s: %s' % (RRD, str(e)))
