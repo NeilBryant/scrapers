@@ -84,7 +84,7 @@ if not USERNAME or not PASSWORD or not ACCOUNT_NAME or not OWNER or \
 	sys.exit('Please edit %s to configure your username, password, and account number.' %
 		sys.argv[0])
 
-host = 'www.citizensbankonline.com'
+host = 'www4.citizensbankonline.com'
 
 br = mechanize.Browser()
 br.set_handle_robots(False)
@@ -110,7 +110,7 @@ if DEBUG:
 
 
 try:
-	br.open('https://%s/banking/login.asp?l=2' % host)
+	br.open('https://%s/efs/servlet/efs/login.jsp' % host)
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
@@ -147,29 +147,6 @@ except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for host transfer page, has %s changed?' % host)
-host = urlparse(r.geturl())[1]
-
-try:
-	br.select_form('login')
-except mechanize.FormNotFoundError:
-	sys.exit('Unable to locate identity check form, has %s changed?' % host)
-
-host = urlparse(br.form.action)[1]
-
-try:
-	r = br.submit()
-except HTTPError, e:
-	sys.exit('%d %s' % (e.code, e.msg))
-if not br.viewing_html():
-	sys.exit('Unable to retrieve post-host transfer intermediate page, has %s changed?' % host)
-host = urlparse(r.geturl())[1]
-
-try:
-	r = br.open('https://%s/efs/servlet/efs/loginnew-wait.jsp' % host)
-except HTTPError, e:
-	sys.exit('%d %s' % (e.code, e.msg))
-if not br.viewing_html():
-	sys.exit('Unable to retrieve second post-host transfer intermediate page page, has %s changed?' % host)
 host = urlparse(r.geturl())[1]
 
 soup = BeautifulSoup(r.get_data())
