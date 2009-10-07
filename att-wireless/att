@@ -34,6 +34,7 @@ import logging
 import os
 import re
 import sys
+from urllib import urlencode
 from urllib2 import HTTPError
 
 from BeautifulSoup import BeautifulSoup
@@ -84,6 +85,8 @@ if SUMMARY and (LIST_ALL or SKIP_DETAIL or len(when) > 0):
 if len(when) > 1:
 	usage()
 	sys.exit(1)
+if len(when) == 1:
+	when = when[0]
 
 host = 'www.wireless.att.com'
 
@@ -142,7 +145,7 @@ try:
 	# Sadly, AT&T's site now uses JavaScript to perform this
 	# redirection. Rather than trying to parse the JavaScript
 	# ourselves, just blindly redirect to the URL it uses.
-	br.open('https://%s/olam/authenticateAction.olamexecute?actionEvent=authenticate&fromPage=&target=&pId=&reportActionEvent=A_LGN_LOGIN_SUB' % host)
+	r = br.open('https://%s/olam/authenticateAction.olamexecute?actionEvent=authenticate&fromPage=&target=&pId=&reportActionEvent=A_LGN_LOGIN_SUB' % host)
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
@@ -152,58 +155,57 @@ if not br.viewing_html():
 if SUMMARY:
 	soup = BeautifulSoup(r.get_data())
 
-	for section in soup.findAll('dl', attrs={'class': 'usage'}):
-		type = section.find('dt').string
-		if 'Minutes' in type:
-			usage = re.sub(r'^\s*Used\s+([\d,]+)\s+of\s+([\d,]+)\s*$', r'\1/\2',
-				str(section.find(text=re.compile(r'^\s*Used\s+[\d,]+\s+of\s+[\d,]+\s*$'))))
-			print '%s: %s' % (type, usage)
-		elif type == 'Rollover Summary':
-			text = str(section.find('dd'))
-			have = re.sub(r'.*You have ([\d,]+).*', r'\1', text)
-			expiring = re.sub(r'.*([\d,]+) minutes to expire on ([\d/]+).*',
-				r'\1 expire on \2', text)
-			print '%s: %s, %s' % (type, have, expiring)
-		elif type == 'Next Bill Cycle':
-			print '%s: %s' % (type, section.find('dd').string)
+	for section in soup.findAll(id=re.compile(r'^metering-labels(-first)?$')):
+		type = section.string.strip()
+		usage = ''.join(
+			section.findNextSibling(id=re.compile(r'metering-data(-first)?')).\
+			findAll(text=True))
+		usage = re.sub(r'^\s*([\d,]+)\s+of\s+([\d,]+) used\s*$', r'\1/\2', usage)
+		print '%s: %s' % (type, usage)
+
+	usage_footer = soup.find(id='usage-footer')
+
+	expiring = usage_footer.find(text=re.compile(r'Rollover Minutes:')).\
+		findNext(text=re.compile(r'\d+ minutes'))
+	expiring = re.sub(
+		r'.*\D([\d,]+) minutes.*\s([\d/]+).*',
+		r'\1 expire on \2', expiring)
+	print 'Rollover Minutes: %s' % (expiring)
+
+	print 'Next Bill Cycle: %s' % \
+		usage_footer.find('p', attrs={'class': 'bill-cycle'}).\
+			find(text=re.compile(r'^\s*\d{2}/\d{2}/\d{2,4}$'))
 
 	sys.exit(0)
 
 
 try:
-	r = br.open('https://%s/view/billPayCombBillReflectionAction.doview?reportActionEvent=A_VIEW_AFFILIATE_WIRELESS_CALL_DETAILS' % host)
+	r = br.open('https://%s/view/statementHistoryReflectionAction.doview?reportActionEvent=A_PMT_VIEW_ALL_AVAIL_STATE_HIST_LINK' % host)
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for bill summary page, has %s changed?' % host)
 
-
-try:
-	br.select_form('billEngineForm')
-except mechanize.FormNotFoundError:
-	sys.exit('Unable to locate bill selection form, has %s changed?' % host)
+soup = BeautifulSoup(r.get_data())
+dates = soup.findAll(
+	text=re.compile(r'^\s*\d{2}/\d{2}/\d{2,4} - \d{2}/\d{2}/\d{2,4}\s*$'))
 
 if LIST_ALL:
-	for item in br.form.find_control('billDate').items:
-		print '%s: %s' % (item.name, item.attrs['label'])
+	for date in dates:
+		print '%s: %s' % (date.split(' - ')[1], date)
 	sys.exit(0)
 
 if when:
-	for item in br.form.find_control('billDate').items:
-		if when[0] == item.attrs['label']:
-			when[0] = item.name
-			break
-		elif item.attrs['label'].endswith(' - %s' % when[0]):
-			when[0] = item.name
-			break
-		elif when[0] == item.name:
+	for date in dates:
+		if date == when or date.endswith(' - %s' % when):
+			post_date = date.split(' - ')[0]
 			break
 	else:
-		sys.exit('No bill is available for %s.' % when[0])
-	br['billDate'] = when
+		sys.exit('No bill is available for %s.' % when)
 
 try:
-	r = br.submit()
+	r = br.open('https://%s/view/billPayReflectionAction.doview?reportActionEvent=A_PMT_STATE_HIST_VIEW' % host,
+		urlencode({'billDate': post_date}))
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
