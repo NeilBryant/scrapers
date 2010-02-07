@@ -1,6 +1,6 @@
 #!/usr/bin/python -tt
 
-# HSBC account balance scraper v2.0
+# HSBC account balance scraper v2.0.1
 # Copyright (c) 2007-9, John Morrissey <jwm@horde.net>
 #
 # This program is free software; you can redistribute it and/or modify it
@@ -24,6 +24,7 @@ import sys
 from urllib2 import HTTPError
 
 from BeautifulSoup import BeautifulSoup
+import html5lib
 import mechanize
 
 # Your account number and passwords for hsbcdirect.com. This script should
@@ -77,7 +78,7 @@ if not ACCOUNT_NUM or not ACCOUNT_PASS or not ACCOUNT_PASS2 or not OWNER or \
 	sys.exit('Please edit %s and follow the directions in the comments.' %
 		sys.argv[0])
 
-host = 'www.hsbcdirect.com'
+host = 'www.us.hsbc.com'
 
 br = mechanize.Browser()
 br.set_handle_robots(False)
@@ -142,10 +143,14 @@ except HTTPError, e:
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for password verification page, has %s changed?' % host)
 
-try:
-	br.select_form('inputForm')
-except mechanize.FormNotFoundError:
-	sys.exit('Unable to locate password form, has %s changed?' % host)
+br.form = br.global_form()
+br.form.action = 'https://%s/1/2/?idv_cmd=idv.Authentication' % host
+br.form.method = 'POST'
+#try:
+#	br.select_form('inputForm')
+#except mechanize.FormNotFoundError:
+#	print r.get_data()
+#	sys.exit('Unable to locate password form, has %s changed?' % host)
 
 br['memorableAnswer'] = ACCOUNT_PASS
 for control in br.form.controls:
@@ -162,13 +167,13 @@ except HTTPError, e:
 if not br.viewing_html():
 	sys.exit('Unable to retrieve summary page, has %s changed?' % host)
 
-try:
-	for form in br.forms():
-		if re.search(r'^PC_[\d_]+_CSK_VerifyEmailCheckForm$', form.name):
-			br.select_form(form.name)
-			break
-except mechanize.FormNotFoundError:
-	sys.exit('Unable to locate account summary redirect form, has %s changed?' % host)
+br.form = br.global_form()
+#for form in br.forms():
+#	if re.search(r'^PC_[\d_]+_CSK_VerifyEmailCheckForm$', form.name):
+#		br.select_form(form.name)
+#		break
+#else:
+#	sys.exit('Unable to locate account summary redirect form, has %s changed?' % host)
 
 # The form action is set by some validation JavaScript, so we have to
 # blindly set it ourselves.
@@ -180,7 +185,8 @@ except HTTPError, e:
 if not br.viewing_html():
 	sys.exit('Unable to retrieve summary page, has %s changed?' % host)
 
-soup = BeautifulSoup(r.get_data())
+parser = html5lib.HTMLParser(tree=html5lib.treebuilders.getTreeBuilder("beautifulsoup"))
+soup = parser.parse(r.get_data())
 try:
 	balance = soup.find(text=ACCOUNT_NAME).findParent(name='tr').\
 		find(text=re.compile(r'\$([0-9,]+\.[0-9]{2})'))
