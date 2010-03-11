@@ -113,7 +113,7 @@ if DEBUG:
 	logger.setLevel(logging.DEBUG)
 
 try:
-	br.open('https://%s/olam/loginAction.doview' % host)
+	br.open('https://%s/olam/dashboardAction.olamexecute' % host)
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
@@ -134,22 +134,6 @@ except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for login verification intermediate page, has %s changed?' % host)
-
-
-try:
-	br.select_form('loginInProgressForm')
-except mechanize.FormNotFoundError:
-	sys.exit('Unable to locate login form, has %s changed?' % host)
-
-try:
-	# Sadly, AT&T's site now uses JavaScript to perform this
-	# redirection. Rather than trying to parse the JavaScript
-	# ourselves, just blindly redirect to the URL it uses.
-	r = br.open('https://%s/olam/authenticateAction.olamexecute?actionEvent=authenticate&fromPage=&target=&pId=&reportActionEvent=A_LGN_LOGIN_SUB' % host)
-except HTTPError, e:
-	sys.exit('%d %s' % (e.code, e.msg))
-if not br.viewing_html():
-	sys.exit('Unable to retrieve summary page, has %s changed?' % host)
 
 
 if SUMMARY:
