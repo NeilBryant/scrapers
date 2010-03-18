@@ -1,7 +1,8 @@
 #!/usr/bin/python -tt
 
-# HSBC account balance scraper v2.0.1
+# HSBC account balance scraper v2.1
 # Copyright (c) 2007-9, John Morrissey <jwm@horde.net>
+# Copyright (c) 2010, Matthew John Ernisse <mernisse@ub3rgeek.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of Version 2 of the GNU General Public License as
@@ -30,19 +31,25 @@ import mechanize
 # Your account number and passwords for hsbcdirect.com. This script should
 # be owner-readable ONLY due to the cleartext credentials. This script DOES
 # NOT check, it is up to YOU.
-ACCOUNT_NUM = ''
-ACCOUNT_PASS = ''
-ACCOUNT_PASS2 = ''
+USERNAME = ''
+PASSWORD = ''
+PASSWORD_FAKE_KEYBOARD = ''
 
-# The name of the account as it appears in the Account Summary page.
-ACCOUNT_NAME = 'ONLINE SAVINGS'
+# The name of the accounts as they appear in the Account Summary page,
+# and the corresponding key to write them to the tab file/RRD as.
+# Comment out those you don't have.
+ACCOUNTS = {
+	'ONLINE SAVINGS': 'savings',
+	'ONLINE PAYMENT ACCOUNT': 'checking',
+	'ONLINE CD 12 MONTHS': 'cd',
+}
 
 # This e-mail address will be appended to the User-Agent header, so
 # the site can contact you about your scraping if they so desire.
 OWNER = ''
 
 # By default, store the RRD file in the same directory as this script.
-RRD = '%s/fidelity-balance.rrd' % os.path.dirname(sys.argv[0])
+RRD = '%s/hsbc-balance.rrd' % os.path.dirname(sys.argv[0])
 # Keep this many years of data in the RRD.
 RRD_KEEP_LENGTH = 3
 
@@ -56,7 +63,7 @@ DEBUG = False
 
 
 def usage():
-	print 'HSBC account balance scraper v2.0'
+	print 'HSBC account balance scraper v2.1'
 	print 'Usage: %s [-h|--help]' % os.path.basename(sys.argv[0])
 	print ''
 	print '    -h, --help                    display this help and exit'
@@ -73,7 +80,8 @@ for option in options:
 		usage()
 		sys.exit(0)
 
-if not ACCOUNT_NUM or not ACCOUNT_PASS or not ACCOUNT_PASS2 or not OWNER or \
+if not USERNAME or not PASSWORD or not PASSWORD_FAKE_KEYBOARD or \
+   not OWNER or \
    not (RRD or TAB) or (RRD and not RRD_KEEP_LENGTH):
 	sys.exit('Please edit %s and follow the directions in the comments.' %
 		sys.argv[0])
@@ -104,7 +112,7 @@ if DEBUG:
 
 
 try:
-	br.open('https://%s/1/2/1/logon' % host)
+	br.open('https://%s/1/2/3/personal/online-services/personal-internet-banking/log-on' % host)
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
@@ -115,26 +123,7 @@ try:
 except mechanize.FormNotFoundError:
 	sys.exit('Unable to locate login form, has %s changed?' % host)
 
-br['userid'] = ACCOUNT_NUM
-
-# hsbcdirect.com sets an empty domain for a critical cookie and is therefore
-# not RFC 2965 compliant:
-#
-#   3.3.2  Rejecting Cookies  To prevent possible security or privacy
-#   violations, a user agent rejects a cookie according to rules below. The
-#   goal of the rules is to try to limit the set of servers for which a
-#   cookie is valid, based on the values of the Path, Domain, and Port
-#   attributes and the request-URI, request-host and request-port.
-#   [...]
-#      *  The value for the Domain attribute contains no embedded dots,
-#         and the value is not .local.
-#
-# Without this cookie, the login process breaks, so kludge around this
-# by looking for cookies with empty domains and explicitly setting them.
-for cookie in br.response().info().getheaders('Set-Cookie'):
-	if re.search(r';\s*Domain\s*=\s*;', cookie):
-		br.set_cookie(re.sub(r';\s*Domain\s*=\s*;',
-			';Domain=.hsbcdirect.com;', cookie))
+br['userid'] = USERNAME
 
 try:
 	r = br.submit()
@@ -146,19 +135,14 @@ if not br.viewing_html():
 br.form = br.global_form()
 br.form.action = 'https://%s/1/2/?idv_cmd=idv.Authentication' % host
 br.form.method = 'POST'
-#try:
-#	br.select_form('inputForm')
-#except mechanize.FormNotFoundError:
-#	print r.get_data()
-#	sys.exit('Unable to locate password form, has %s changed?' % host)
 
-br['memorableAnswer'] = ACCOUNT_PASS
+br['memorableAnswer'] = PASSWORD
 for control in br.form.controls:
 	if control.name == 'password':
-		control.value = ACCOUNT_PASS2
+		control.value = PASSWORD_FAKE_KEYBOARD
 		break
 else:
-	sys.exit('Unable to find ACCOUNT_PASS2 field, has %s changed?' % host)
+	sys.exit('Unable to find PASSWORD_FAKE_KEYBOARD field, has %s changed?' % host)
 
 try:
 	r = br.submit()
@@ -168,13 +152,6 @@ if not br.viewing_html():
 	sys.exit('Unable to retrieve summary page, has %s changed?' % host)
 
 br.form = br.global_form()
-#for form in br.forms():
-#	if re.search(r'^PC_[\d_]+_CSK_VerifyEmailCheckForm$', form.name):
-#		br.select_form(form.name)
-#		break
-#else:
-#	sys.exit('Unable to locate account summary redirect form, has %s changed?' % host)
-
 # The form action is set by some validation JavaScript, so we have to
 # blindly set it ourselves.
 br.form.action = 'https://%s/1/2/3/personal/online-services/personal-internet-banking/view-accounts/account-summary?isUrlRedirect=yes&urlRedirectCommand=cmd_AccountSummary' % host
@@ -185,32 +162,49 @@ except HTTPError, e:
 if not br.viewing_html():
 	sys.exit('Unable to retrieve summary page, has %s changed?' % host)
 
-parser = html5lib.HTMLParser(tree=html5lib.treebuilders.getTreeBuilder("beautifulsoup"))
+parser = html5lib.HTMLParser(tree=html5lib.treebuilders.getTreeBuilder('beautifulsoup'))
 soup = parser.parse(r.get_data())
-try:
-	balance = soup.find(text=ACCOUNT_NAME).findParent(name='tr').\
-		find(text=re.compile(r'\$([0-9,]+\.[0-9]{2})'))
-except:
-	sys.exit('Unable to retrieve balance, has %s changed?' % host)
+
+balances = {}
+for account in ACCOUNTS:
+	try:
+		balance = soup.find(text=account).findParent(name='tr').\
+			find(text=re.compile(r'\$([0-9,]+\.[0-9]{2})'))
+	except:
+		sys.exit('Unable to retrieve balance, has %s changed?' % host)
+
+	balances[ACCOUNTS[account]] = \
+		balance.replace('$', '').replace(',', '')
 
 if TAB:
 	out = open(TAB, 'w')
-	out.write(balance.replace('$', '').replace(',', '') + '\n')
+	for account, balance in balances.iteritems():
+		out.write('%s: %s\n' % (account, balance))
 	out.close()
 	sys.exit(0)
 
-from rrdtool import *
-rrd = RoundRobinDatabase(RRD)
+import rrd
+r = rrd.RoundRobinDatabase(RRD)
+
+update_every = 4 * 60 * 60
+keep_rows = (RRD_KEEP_LENGTH * 365 * 24 * 60 * 60) / update_every
 
 if not os.path.exists(RRD):
-	update_every = 4 * 60 * 60
-	keep_rows = RRD_KEEP_LENGTH * 365 * (24 / update_every)
-	rrd.create(
-		DataSource('balance', type=GaugeDST, heartbeat=update_every,
-			min='0', max='100000000'),
-		RoundRobinArchive(cf=LastCF, xff=0, steps=1, rows=keep_rows),
-		step=7200)
+	args = []
+	for account in balances:
+		args.append(rrd.DataSource(account, type=rrd.GaugeDST,
+			heartbeat=update_every, min=0, max=2000000))
+	args.append(rrd.RoundRobinArchive(cf=rrd.LastCF, xff=0, steps=1,
+		rows=keep_rows))
+
+	r.create(*args, step=7200)
+
 try:
-	rrd.update(Val(total), t=['balance'])
+	template = []
+	values = []
+	for account, balance in balances.iteritems():
+		template.append(account)
+		values.append(balance)
+	r.update(rrd.Val(*values), template=template)
 except Exception, e:
 	sys.exit('Unable to update RRD %s: %s' % (RRD, str(e)))
