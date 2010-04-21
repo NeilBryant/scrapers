@@ -1,7 +1,7 @@
 #!/usr/bin/python -tt
 
 # AT&T Wireless Online Account Management scraper
-# Copyright (c) 2008-9, John Morrissey <jwm@horde.net>
+# Copyright (c) 2008-10, John Morrissey <jwm@horde.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of Version 2 of the GNU General Public License as
@@ -156,9 +156,8 @@ if SUMMARY:
 		r'\1 expire on \2', expiring)
 	print 'Rollover Minutes: %s' % (expiring)
 
-	print 'Next Bill Cycle: %s' % \
-		usage_footer.find('p', attrs={'class': 'bill-cycle'}).\
-			find(text=re.compile(r'^\s*\d{2}/\d{2}/\d{2,4}$'))
+	usage_footer.find('p', attrs={'class': 'bill-cycle'}).\
+		find(text=re.compile(r'^\s*Next\s+Bill\s+Cycle:\s*(\d+/\d+/\d+|\w+\s*\d+,?\s*\d+)\s*$'))
 
 	sys.exit(0)
 
