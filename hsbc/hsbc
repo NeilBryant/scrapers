@@ -1,6 +1,6 @@
 #!/usr/bin/python -tt
 
-# HSBC account balance scraper v2.1
+# HSBC account balance scraper v2.1.1
 # Copyright (c) 2007-9, John Morrissey <jwm@horde.net>
 # Copyright (c) 2010, Matthew John Ernisse <mernisse@ub3rgeek.net>
 #
@@ -63,7 +63,7 @@ DEBUG = False
 
 
 def usage():
-	print 'HSBC account balance scraper v2.1'
+	print 'HSBC account balance scraper v2.1.1'
 	print 'Usage: %s [-h|--help]' % os.path.basename(sys.argv[0])
 	print ''
 	print '    -h, --help                    display this help and exit'
@@ -118,12 +118,8 @@ except HTTPError, e:
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for login page, has %s changed?' % host)
 
-try:
-	br.select_form('ibLogonForm')
-except mechanize.FormNotFoundError:
-	sys.exit('Unable to locate login form, has %s changed?' % host)
-
-br['userid'] = USERNAME
+br.select_form(predicate=lambda x: x.attrs.get('id') == 'ibLogonForm')
+br.form['userid'] = USERNAME
 
 try:
 	r = br.submit()
