@@ -118,7 +118,7 @@ try:
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 
-r = br.open('https://workplaceservices100.fidelity.com/netbenefits/navstation/homepage/home')
+r = br.open('https://workplaceservices200.fidelity.com/netbenefits/navstation/homepage/home')
 soup = BeautifulSoup(r.get_data())
 
 try:
