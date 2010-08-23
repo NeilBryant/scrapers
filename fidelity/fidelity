@@ -119,7 +119,8 @@ except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 
 r = br.open('https://workplaceservices200.fidelity.com/netbenefits/navstation/homepage/home')
-soup = BeautifulSoup(r.get_data())
+strip_script = re.compile(r'<script\s+.*?</script>', re.I + re.S)
+soup = BeautifulSoup(strip_script.sub('', r.get_data()))
 
 try:
 	total = soup.find(attrs={'id' : 'balance0'}).strong.string
