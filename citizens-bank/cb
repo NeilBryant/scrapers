@@ -149,18 +149,6 @@ if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for host transfer page, has %s changed?' % host)
 host = urlparse(r.geturl())[1]
 
-soup = BeautifulSoup(r.get_data())
-refresh = soup.find('meta', attrs={'http-equiv': 'refresh'})
-url = re.sub(r'.*url=([^;]+)($|;)', r'\1', refresh['content'])
-
-try:
-	r = br.open(url)
-except HTTPError, e:
-	sys.exit('%d %s' % (e.code, e.msg))
-if not br.viewing_html():
-	sys.exit('Unable to retrieve HTML for third post-host transfer intermediate page, has %s changed?' % host)
-host = urlparse(r.geturl())[1]
-
 try:
 	r = br.open('https://%s/efs/servlet/efs/login-rsa-wait.jsp' % host)
 except HTTPError, e:
