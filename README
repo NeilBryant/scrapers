@@ -25,23 +25,6 @@ Please note that these scrapers work for me, but may require modification to
 work in other situations (e.g., if you have multiple accounts with HSBC).
 
 
-Special Note for the Citizens Bank Scraper
-==========================================
-
-Citizens Bank has security measures that track which computers you use to
-visit their site. If you log into their online banking system from a new
-computer, it asks additional questions to verify your identity and sets a
-cookie so you aren't asked for this detailed information the next time you
-log in from that computer.
-
-The scraper does not attempt to deal with this situation. Therefore, you
-must set PMDATA at the top of the scraper to the value of the cookie that
-is set. For example, in Firefox's preferences, go to Privacy -> Show
-Cookies... and search for "citizensbank". Copy and paste the Content for the
-PMData cookie into the PMDATA configuration variable at the top of the
-scraper. If you do not perform this step, the scraper will not function.
-
-
 Please Be Polite
 ================
 
