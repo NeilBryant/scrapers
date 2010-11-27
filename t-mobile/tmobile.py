@@ -1,8 +1,8 @@
 #!/usr/bin/python -tt
-#
-# $Id: tmobile.py,v 1.1 2008/10/15 00:34:55 mernisse Exp $
-#
-# tmobile.py - (c) 2008 Matthew J Ernisse <mernisse@ub3rgeek.net>
+
+# T-Mobile online account management scraper
+# (c) 2008 Matthew J Ernisse <mernisse@ub3rgeek.net>
+# (c) 2010 John Morrissey <jwm@horde.net>
 #
 # Redistribution and use in source and binary forms, 
 # with or without modification, are permitted provided 
@@ -27,129 +27,206 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR 
 # TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE 
 # USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# scrape the t-Mobile online account manager for minute and text message
-# balances and insert into an RRD for graphing.
 
-import mechanize
+# 10 digit T-Mobile US telephone number.
+PHONE_NUMBER = ''
+# my.t-mobile.com password for the above mobile number.
+PASSWORD = ''
+
+# This e-mail address will be appended to the User-Agent header, so
+# the site can contact you about your scraping if they so desire.
+OWNER = ''
+
+PROXY = ''
+
+DEBUG = False
+
+
+import getopt
+import logging
 import os
 import re
 import sys
+import urllib2
+
 import BeautifulSoup
+import ClientForm
+import mechanize
 
-from rrdtool import *
-from urllib2 import Request, urlopen
-from ClientForm import HiddenControl
+def usage():
+	print 'T-Mobile online account management scraper'
+	print 'Usage: ' + os.path.basename(sys.argv[0]) + ' [-D|--skip-detail] [-h|--help] [-l|--list] [-s|--summary] DATE'
+	print ''
+	print '    -D, --skip-detail  omit detail when retrieving full bill'
+	print '    -h, --help         display this help and exit'
+	print '    -l, --list         list available bill dates'
+	print '    -s, --summary      display account summary'
 
-#
-# Configuration Section
-#
-# MOBILE is you 10 digit t-mobile US telephone number
-#
-MOBILE=""
-#
-# this is your my.t-mobile.com password for the above 
-# mobile number
-#
-PASSWORD=""
-#
-# this is where to store the rrd output file
-#
-RRD = ""
-#
-# End of configuration section
-#
-start_page = "https://my.t-mobile.com/login/MyTmobileLogin.aspx"
-landing_page = "https://my.t-mobile.com/billing/"
-minutes_page = "https://ebill.t-mobile.com/myTMobile/onMinutesUsedLinkClick.do"
+try:
+	options, when = getopt.gnu_getopt(sys.argv[1:], 'Dhls',
+		['skip-detail', 'help', 'list', 'summary'])
+except getopt.GetoptError, e:
+	print os.path.basename(sys.argv[0]) + ': ' + str(e)
+	usage()
+	sys.exit(1)
+
+LIST_ALL = False
+SKIP_DETAIL = False
+SUMMARY = False
+for option in options:
+	if option[0] == '-D' or option[0] == '--skip-detail':
+		SKIP_DETAIL = True
+	elif option[0] == '-h' or option[0] == '--help':
+		usage()
+		sys.exit(1)
+	elif option[0] == '-l' or option[0] == '--list':
+		LIST_ALL = True
+	elif option[0] == '-s' or option[0] == '--summary':
+		SUMMARY = True
+
+if not PHONE_NUMBER or not PASSWORD or not OWNER:
+	sys.exit('Please edit %s and follow the directions in the comments.' %
+		sys.argv[0])
+
+if LIST_ALL and len(when) > 0:
+	usage()
+	sys.exit(1)
+if SUMMARY and (LIST_ALL or SKIP_DETAIL or len(when) > 0):
+	usage()
+	sys.exit(1)
+
+if not SUMMARY and not LIST_ALL:
+	if len(when) != 1:
+		usage()
+		sys.exit(1)
+	when = when[0]
 
 br = mechanize.Browser()
-
 br.set_handle_robots(False)
 br.set_handle_refresh(True, 10, True)
 br.set_handle_redirect(True)
+br.addheaders = [
+	('User-agent',
+		'Mozilla/5.0 (X11; U; Linux i686; en-US; rv 1.0) %s' % OWNER),
+]
+if PROXY:
+	br.set_proxies({
+		'http': PROXY,
+		'https': PROXY,
+	})
 
-#
-# Debug
-#
-#import logging
-#br.set_debug_http(True)
-#br.set_debug_responses(True)
-#br.set_debug_redirects(True)
-#logger = logging.getLogger("mechanize")
-#logger.addHandler(logging.StreamHandler(sys.stdout))
-#logger.setLevel(logging.DEBUG)
+if DEBUG:
+	br.set_debug_http(True)
+	br.set_debug_responses(True)
+	br.set_debug_redirects(True)
+	logger = logging.getLogger('mechanize')
+	logger.addHandler(logging.StreamHandler(sys.stdout))
+	logger.setLevel(logging.DEBUG)
 
 try:
-	br.open(start_page)
-except HTTPError, e:
+	br.open('https://my.t-mobile.com/login/MyTmobileLogin.aspx')
+except urllib2.HTTPError, e:
 	sys.exit("%d: %s" % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for login page, has my.t-mobile.com changed?')
 
-assert br.viewing_html()
-# 
-# build the form, this is done by JavaScript on the actual live site.  The
-# form onClick handler sets __EVENTTARGET and __EVENTARGUMENT.
-# 
-br.select_form('Form1')
+# Build the form. This is normally done by JavaScript on the site.
 form = list(br.forms())[0]
-et = HiddenControl('hidden', '__EVENTTARGET', {'value': 'Login1$btnLoginClickOnce'})
-ea = HiddenControl('hidden', '__EVENTARGUMENT', {'value': ''})
-
+et = ClientForm.HiddenControl('hidden', '__EVENTTARGET',
+	{'value': 'Login1$btnLogin'})
 form.controls.append(et)
+ea = ClientForm.HiddenControl('hidden', '__EVENTARGUMENT', {'value': ''})
 form.controls.append(ea)
 
-br["Login1:txtMSISDN"] = MOBILE
-br["Login1:txtPassword"] = PASSWORD
+try:
+	br.select_form('Form1')
+except mechanize.FormNotFoundError:
+	sys.exit('Unable to locate login form, has my.t-mobile.com changed?')
+
+br['Login1:txtMSISDN'] = PHONE_NUMBER
+br['Login1:txtPassword'] = PASSWORD
 
 try:
 	r = br.submit()
-except HTTPError, e:
-	sys.exit("%d: %s" % (e.code, e.msg))
+except urllib2.HTTPError, e:
+	sys.exit('%d: %s' % (e.code, e.msg))
 
-#
-# fetch the landing page, this is done by a sneaky javascript bit, if you don't
-# do this, then it 302's you to the logout and kills your session.
-#
+if SUMMARY:
+	try:
+		r = br.open('https://my.t-mobile.com/PartnerServices.aspx?service=eBill&link=MonthlyUsage')
+		r = br.open('https://ebill.t-mobile.com/myTMobile/getUnbilledUsages.do?FromJSONCall=true&msisdn0=%s' % PHONE_NUMBER)
+		r = br.open('https://ebill.t-mobile.com/myTMobile/pages/modunbilledusage/unbilledUsageOverview.jsp')
+	except urllib2.HTTPError, e:
+		sys.exit('%d: %s' % (e.code, e.msg))
+	if not br.viewing_html():
+		sys.exit('Unable to retrieve HTML for usage summary page, has my.t-mobile.com changed?')
+
+	soup = BeautifulSoup.BeautifulSoup(r.get_data())
+	summary = soup.find('table', attrs={'id': 'tblMinuteUsageSummary'})
+
+	services = summary.findAll(attrs={'class': re.compile(r'(^|\s+)ubmu_service(\s+|$)')})
+	for service in services:
+		row = service.findParent('tr')
+		used = row.find(attrs={'class': re.compile(r'(^|\s+)ubmu_used(\s+|$)')})
+		included = row.find(attrs={'class': re.compile(r'(^|\s+)ubmu_included(\s+|$)')})
+		print '%s: %s / %s' % (
+			service.findChild(text=True), used.findChild(text=True),
+			included.findChild(text=True),
+		)
+
 try:
-	r = br.open(landing_page)
-except HTTPError, e:
+	r = br.open('https://my.t-mobile.com/PartnerServices.aspx?service=eBill&link=DetailsUsage&unavid=viewbill')
+except urllib2.HTTPError, e:
 	sys.exit("%d: %s" % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for bill selection page, has my.t-mobile.com changed?')
 
-#
-# now fetch the minutes page
-#
+soup = BeautifulSoup.BeautifulSoup(r.get_data())
+bill_links = {}
+
+billdate_re = re.compile(r'.*Bill\s+date:\s*\w{3} (\w{3} \d{2}) \d{2}:\d{2}:\d{2} \w{3} (\d{4}).*',
+	flags=re.I + re.S)
+for bill in soup.findAll(text=re.compile(r'Bill\s+date:')):
+	date = billdate_re.sub(r'\1 \2', bill)
+
+	while bill.parent:
+		bill = bill.parent
+
+		if 'selectedbill' in bill.get('class', '').split():
+			# The currently selected bill is displayed on the current page.
+			url = None
+			break
+
+		view = bill.find(text=re.compile('View\s+Bill'))
+		if not view:
+			if bill.name == 'li':
+				# If we go up further, we risk catching the bill URL for
+				# a different month.
+				raise Exception('Unable to locate bill cycle selection URL for %s.' % date)
+			continue
+		url = view.findParent('a')['href']
+
+	bill_links[date] = url
+
+if LIST_ALL:
+	for date in bill_links:
+		print date
+	sys.exit(0)
+
 try:
-	r = br.open(minutes_page)
-except HTTPError, e:
+	if bill_links[when]:
+		r = br.open('https://ebill.t-mobile.com/myTMobile/%s' % bill_links[when])
+	r = br.open('https://ebill.t-mobile.com/myTMobile/onPrintBill.do')
+except urllib2.HTTPError, e:
 	sys.exit("%d: %s" % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for printable bill, has my.t-mobile.com changed?')
 
-try:
-        soup = BeautifulSoup.BeautifulSoup(r.get_data())
-except Exception, e:
-        print "Caught Exception %s" % ( str(e) )
-        print r.get_data()
-        sys.exit(1)
-
-balances = { "text": "0", "minutes": "0" }
-
-table = soup.find('table', attrs={"id": "UnbilledSummary.MinutesUsedSummary"})
-rows = table.findAll('tr', attrs={"class":"data_row"})
-
-for row in rows:
-	td = row.findAll('td')
-	if td[0].contents[0] == "Text Messages":
-		balances['text'] = float(td[5].contents[0])
-	elif td[0].contents[0] == "Incl Minutes":
-		balances['minutes'] = float(td[5].contents[0])
-
-rrd = RoundRobinDatabase(RRD)
-if not os.path.exists(RRD):
-        rrd.create(
-                DataSource("minutes", type=GaugeDST, heartbeat=14400, min=0, max=1000000000),
-                DataSource("text", type=GaugeDST, heartbeat=14400, min=0, max=1000000000),
-                RoundRobinArchive(cf=LastCF, xff=0, steps=1, rows=6570),
-                step=7200)
-
-rrd.update(Val(balances['minutes'], balances['text']), 
-	t=["minutes", "text"])
-
+if SKIP_DETAIL:
+	soup = BeautifulSoup.BeautifulSoup(r.get_data())
+	soup.find(id='LocalAirtimeDetailData').extract()
+	soup.find(id='MessagingChargesDetailData').extract()
+	soup.find(id='DataServiceChargesDetailData').extract()
+	print soup
+else:
+	print r.get_data()
