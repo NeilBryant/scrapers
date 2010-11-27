@@ -10,15 +10,15 @@ Scrapers are included for:
 
 American Express (americanexpress.com)
 American Funds (americanfunds.com)
-AT&T Wireless (wireless.att.com)
+AT&T Wireless (wireless.att.com) [unmaintained]
 Canandaigua National Bank & Trust (cnbank.com)
 Citizens Bank (Charter One in some markets) (citizensbank.com)
 Fidelity 401(k) (401k.fidelity.com)
 HSBC (hsbcdirect.com)
 mypaystub.info
 T-Mobile (my.tmobile.com)
-T. Rowe Price 401(k) (rps.troweprice.com)
-Treasury Securities (using yahoo.com)
+T. Rowe Price 401(k) (rps.troweprice.com) [unmaintained]
+Treasury Securities (using yahoo.com) [unmaintained]
 
 
 Please note that these scrapers work for me, but may require modification to
