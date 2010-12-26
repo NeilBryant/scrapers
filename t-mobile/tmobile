@@ -173,6 +173,7 @@ if SUMMARY:
 			service.findChild(text=True), used.findChild(text=True),
 			included.findChild(text=True),
 		)
+	sys.exit(0)
 
 try:
 	r = br.open('https://my.t-mobile.com/PartnerServices.aspx?service=eBill&link=DetailsUsage&unavid=viewbill')
@@ -212,6 +213,9 @@ if LIST_ALL:
 	for date in bill_links:
 		print date
 	sys.exit(0)
+
+if when not in bill_links:
+	sys.exit('Bill for "%s" is not available.' % when)
 
 try:
 	if bill_links[when]:
