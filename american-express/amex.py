@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# amex.py - (c) 2008 Matthew J Ernisse <mernisse@ub3rgeek.net>
+# amex.py - (c) 2008-2011 Matthew J Ernisse <mernisse@ub3rgeek.net>
 #
 # Redistribution and use in source and binary forms, 
 # with or without modification, are permitted provided 
@@ -36,6 +36,7 @@ import os
 import mechanize
 
 import BeautifulSoup
+from rrd import *
 from urllib2 import HTTPError
 
 #
@@ -43,15 +44,15 @@ from urllib2 import HTTPError
 # be owner-readable ONLY because of the cleartext credentials.  The script 
 # DOES NOT check, it is up to YOU.
 #
-USERNAME = ""
-PASSWORD = ""
+USERNAME = ''
+PASSWORD = ''
 
 #
 # If you simply change BASE to the path to this script, it will be used
 # for all the files created / used by this script.  You can customize the 
 # files individually if you like.
 #
-BASE=""
+BASE=''
 
 #
 # Set AMEX_TAB if you want to write a tab file down.
@@ -86,9 +87,9 @@ COOKIE=BASE + "/amexcookie.txt"
 # End User Configuration
 host = "home.americanexpress.com"
 
-start_page = "https://%s/home/mt_personal_cm.shtml?us_nu=globalbar" % (host)
-dest_page = "https://www99.americanexpress.com/myca/logon/us/action?request_type=LogLogonHandler&location=us_pre1_cards";
-landing_page = "https://www99.americanexpress.com/myca/acctsumm/us/action?request_type=authreg_acctAccountSummary&entry_point=lnk_homepage&aexp_nav=sc_checkbill&referrer=ushome&section=login";
+start_page = "https://%s/home/mt_personal_cm.shtml" % (host)
+action_page = "https://www99.americanexpress.com/myca/logon/us/action?request_type=LogLogonHandler&location=us_pre1_cards";
+dest_page = "https://online.americanexpress.com/myca/acctsumm/us/action?request_type=authreg_acctAccountSummary&entry_point=lnk_homepage&aexp_nav=sc_checkbill&referrer=ushome&section=login";
 
 
 if not USERNAME or not PASSWORD:
@@ -141,14 +142,14 @@ except HTTPError, e:
 cj.save(COOKIE)
 assert br.viewing_html()
 br.select_form('ssoform')
-br["Userid"] = USERNAME 
-br["Pword"] = PASSWORD
+br["UserID"] = USERNAME 
+br["Password"] = PASSWORD
 
 # this is done in javascript by amex's website, so let's sneak it in here.
 forms = list(br.forms())
-forms[1].action = dest_page
 forms[1].set_all_readonly(False)
-br["DestPage"] = landing_page
+forms[1].action = action_page
+br["DestPage"] = dest_page
 br["UserID"] = USERNAME 
 br["Password"] = PASSWORD
 
@@ -181,7 +182,6 @@ if AMEX_TAB:
 	fd.close()
 	sys.exit(0)
 
-from rrdtool import *
 rrd = RoundRobinDatabase(RRD)
 
 if not os.path.exists(RRD):
