@@ -85,9 +85,8 @@ RRD=BASE + "/amex-balance.rrd"
 COOKIE=BASE + "/amexcookie.txt"
 
 # End User Configuration
-host = "home.americanexpress.com"
 
-start_page = "https://%s/home/mt_personal_cm.shtml" % (host)
+start_page = "https://home.americanexpress.com/home/axpi/"
 action_page = "https://www99.americanexpress.com/myca/logon/us/action?request_type=LogLogonHandler&location=us_pre1_cards";
 dest_page = "https://online.americanexpress.com/myca/acctsumm/us/action?request_type=authreg_acctAccountSummary&entry_point=lnk_homepage&aexp_nav=sc_checkbill&referrer=ushome&section=login";
 
@@ -150,8 +149,8 @@ forms = list(br.forms())
 forms[1].set_all_readonly(False)
 forms[1].action = action_page
 br["DestPage"] = dest_page
-br["UserID"] = USERNAME 
-br["Password"] = PASSWORD
+br["USERID"] = USERNAME 
+br["PWD"] = PASSWORD
 
 try:
 	if DEBUG:
@@ -170,8 +169,13 @@ except Exception, e:
 	print r.get_data()
 	sys.exit(1)
 
-balances =  soup.findAll('div', attrs={"class" : "NGBODY3VALUE" })
-balance = balances[3].string.strip().replace("$", "").replace(",", "")
+balances =  soup.findAll('div', attrs={"class" : "NGBODY3VALUE FINSTABBING" })
+
+try:
+	balance = balances[3].string.strip().replace("$", "").replace(",", "")
+except:
+	print 'could not parse balance'
+	sys.exit(1)
 
 if not balance:
 	sys.exit(1)
