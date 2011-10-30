@@ -1,6 +1,6 @@
 #!/usr/bin/python -tt
 
-# mypaystub.info scraper v1.1.1
+# mypaystub.info scraper v1.1.2
 # Copyright (c) 2008-9, John Morrissey <jwm@horde.net>
 #
 # This program is free software; you can redistribute it and/or modify it
@@ -17,6 +17,9 @@
 # 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 # Change history:
+# v1.1.2 (30 Oct 2011):
+# - Update for mypaystub.info form name changes.
+#
 # v1.1.1 (14 Jan 2009):
 # - Quote the document ID properly when retrieving the PDF.
 # - Better error handling.
@@ -43,7 +46,7 @@ from BeautifulSoup import BeautifulSoup
 import mechanize
 
 def usage():
-	print 'mypaystub.info scraper v1.1.1'
+	print 'mypaystub.info scraper v1.1.2'
 	print 'Usage: ' + basename(sys.argv[0]) + ' [-h|--help] DATE'
 	print ''
 	print '    -h, --help   display this help and exit'
@@ -77,13 +80,14 @@ try:
 		urlencode((
 			('__EVENTTARGET', ''),
 			('__EVENTARGUMENT', ''),
-			('__VIEWSTATE', 'dDw2NDk3NTY1MTk7dDw7bDxpPDA+Oz47bDx0PDtsPGk8MT47aTwzPjtpPDc+Oz47bDx0PDtsPGk8MT47aTw1Pjs+O2w8dDw7bDxpPDA+Oz47bDx0PHA8cDxsPEJhY2tJbWFnZVVybDs+O2w8Li4vbG9nby9mcm9udGllci5naWY7Pj47PjtsPGk8MT47PjtsPHQ8cDxwPGw8VmlzaWJsZTs+O2w8bzxmPjs+Pjs+Ozs+Oz4+Oz4+O3Q8O2w8aTwxPjtpPDM+O2k8NT47aTw3Pjs+O2w8dDxwPHA8bDxOYXZpZ2F0ZVVybDs+O2w8L0RESUFyY2hpdmUvaGVscC9ERElBcmNoaXZlL2hlbHAuaHRtOz4+Oz47Oz47dDxwPHA8bDxWaXNpYmxlOz47bDxvPGY+Oz4+Oz47Oz47dDxwPHA8bDxWaXNpYmxlOz47bDxvPGY+Oz4+Oz47Oz47dDxAMDw7QDA8cDxsPERlZmF1bHRJdGVtQ2xhc3M7Q29tcG9uZW50VGFyZ2V0O0hvdmVyQ2xhc3M7RGVmYXVsdElzbGFuZENsYXNzO1dlYk1lbnVTdHlsZTtCb3JkZXJDb2xsYXBzZTs+O2w8O0luZnJhZ2lzdGljcy5XZWJVSS5VbHRyYVdlYk5hdmlnYXRvci5Db21wb25lbnRUYXJnZXQsIEluZnJhZ2lzdGljcy5XZWJVSS5VbHRyYVdlYk5hdmlnYXRvci52NS4zLCBWZXJzaW9uPTUuMy4yMDA1My4xMTIxLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPTdkZDVjMzE2M2YyY2QwY2I8SG9yaXpvbnRhbE1lbnU+Ozs7SW5mcmFnaXN0aWNzLldlYlVJLlVsdHJhV2ViTmF2aWdhdG9yLldlYk1lbnVTdHlsZSwgSW5mcmFnaXN0aWNzLldlYlVJLlVsdHJhV2ViTmF2aWdhdG9yLnY1LjMsIFZlcnNpb249NS4zLjIwMDUzLjExMjEsIEN1bHR1cmU9bmV1dHJhbCwgUHVibGljS2V5VG9rZW49N2RkNWMzMTYzZjJjZDBjYjxXZWJTdGFuZGFyZD47bzx0Pjs+Pjs7O2w8QDA8cDxsPEJvcmRlclN0eWxlO1dpZHRoO0ZvbnRfQm9sZDtGb250X092ZXJsaW5lO0hlaWdodDtGb250X1VuZGVybGluZTtfIVNCO0JvcmRlcldpZHRoO0JvcmRlckNvbG9yO0ZvbnRfU2l6ZTtCO0M7QTtGb3JlQ29sb3I7Rm9udF9JdGFsaWM7QmFja0NvbG9yO0Nzc0NsYXNzO0ZvbnRfTmFtZXM7Rm9udF9TdHJpa2VvdXQ7PjtsPFN5c3RlbS5XZWIuVUkuV2ViQ29udHJvbHMuQm9yZGVyU3R5bGUsIFN5c3RlbS5XZWIsIFZlcnNpb249MS4wLjUwMDAuMCwgQ3VsdHVyZT1uZXV0cmFsLCBQdWJsaWNLZXlUb2tlbj1iMDNmNWY3ZjExZDUwYTNhPE91dHNldD47MTxcZT47bzxmPjtvPGY+OzE8XGU+O288Zj47aTw2NTUzND47MTwxcHg+OzI8MTY5LCAxNzEsIDE4MT47U3lzdGVtLldlYi5VSS5XZWJDb250cm9scy5Gb250VW5pdCwgU3lzdGVtLldlYiwgVmVyc2lvbj0xLjAuNTAwMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWIwM2Y1ZjdmMTFkNTBhM2E8XGU+O1xlO0luZnJhZ2lzdGljcy5XZWJVSS5TaGFyZWQuQ3Vyc29ycywgSW5mcmFnaXN0aWNzLldlYlVJLlNoYXJlZC52NS4zLCBWZXJzaW9uPTUuMy4yMDA1My4xMTIxLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPTdkZDVjMzE2M2YyY2QwY2I8RGVmYXVsdD47XGU7MjxCbGFjaz47bzxmPjsyPExpZ2h0R3JheT47VG9wSG92ZXI0O0A8PjtvPGY+Oz4+O3A8bDx0b3A7Ym90dG9tO2xlZnQ7cmlnaHQ7PjtsPDE8XGU+OzE8XGU+OzE8XGU+OzE8XGU+Oz4+O3A8bDxLO0g7TjtMO007QjtDO0E7RjtHO0Q7RTs+O2w8MTxcZT47NTI8Tm90U2V0PjsxPFxlPjsxPFxlPjsxPFxlPjsyPFxlPjsyPFxlPjsyPFxlPjs1MjxOb3RTZXQ+OzUyPE5vdFNldD47MjxcZT47NTI8Tm90U2V0Pjs+PjtwPGw8dG9wO2JvdHRvbTtsZWZ0O3JpZ2h0Oz47bDwxPFxlPjsxPFxlPjsxPFxlPjsxPFxlPjs+Pjs+O0AwPHA8bDxCb3JkZXJTdHlsZTtXaWR0aDtGb250X0JvbGQ7Rm9udF9PdmVybGluZTtIZWlnaHQ7Rm9udF9VbmRlcmxpbmU7XyFTQjtCb3JkZXJXaWR0aDtCb3JkZXJDb2xvcjtGb250X1NpemU7QjtDO0E7Rm9yZUNvbG9yO0ZvbnRfSXRhbGljO0JhY2tDb2xvcjtDc3NDbGFzcztGb250X05hbWVzO0ZvbnRfU3RyaWtlb3V0Oz47bDw1MjxTb2xpZD47MTxcZT47bzxmPjtvPGY+OzE8XGU+O288Zj47aTw2NTUzND47MTwxcHg+OzI8MjQwLCAyNDAsIDI0MD47NTM8XGU+O1xlOzU0PE5vdFNldD47Tm9uZTsyPEJsYWNrPjtvPGY+OzI8RmxvcmFsV2hpdGU+O1RvcENsYXNzNDtAPD47bzxmPjs+PjtwPGw8dG9wO2JvdHRvbTtsZWZ0O3JpZ2h0Oz47bDwxPFxlPjsxPFxlPjsxPFxlPjsxPFxlPjs+PjtwPGw8SztIO047TDtNO0I7QztBO0Y7RztEO0U7PjtsPDE8XGU+OzUyPE5vdFNldD47MTxcZT47MTxcZT47MTxcZT47MjxcZT47MjxcZT47MjxcZT47NTI8Tm90U2V0Pjs1MjxOb3RTZXQ+OzI8XGU+OzUyPE5vdFNldD47Pj47cDxsPHRvcDtib3R0b207bGVmdDtyaWdodDs+O2w8MTxcZT47MTxcZT47MTxcZT47MTxcZT47Pj47Pjs+Ozs7bDw+Ozs7Ozs7Oz47Pjs7Pjs+Pjs+Pjt0PDtsPGk8Nz47PjtsPHQ8cDxwPGw8VGV4dDs+O2w8XGU7Pj47Pjs7Pjs+Pjt0PDtsPGk8MT47PjtsPHQ8cDxsPFRleHQ7PjtsPFw8Rk9OVCBmYWNlPUFyaWFsIHNpemU9Mlw+V2VsY29tZSB0byB5b3VyIFBheXJvbGwgUmVjb3JkcyBSZXBvc2l0b3J5IGF0IFw8Ylw+TVlQQVlTVFVCLmluZm9cPC9iXD4uXDxiclw+XDxiclw+WW91ciBsb2dpbiB1c2VyIElEIGNvbnNpc3RzIG9mIChpbiBhbGwgbG93ZXIgY2FzZSlcPGJyXD4NCiZuYnNwXDsgJm5ic3BcOy0gVGhlIGZpcnN0IGxldHRlciBvZiB5b3VyIGZpcnN0IG5hbWVcPGJyXD4NCiZuYnNwXDsgJm5ic3BcOy0gVGhlIGZpcnN0IHRocmVlIGxldHRlcnMgb2YgeW91ciBsYXN0IG5hbWUgKG9yIGZpcnN0IHR3byBpZiB5b3UgaGF2ZSBhIDItbGV0dGVyIGxhc3QgbmFtZSlcPGJyXD4NCiZuYnNwXDsgJm5ic3BcOy0gVGhlIGxhc3QgZm91ciBudW1iZXJzIG9mIHlvdXIgc29jaWFsIHNlY3VyaXR5IG51bWJlci5cPGJyXD5cPGJyXD4NClVwb24gZmlyc3QgbG9naW46XDxiclw+DQombmJzcFw7ICZuYnNwXDstIFlvdXIgaW5pdGlhbCBwYXNzd29yZCBpcyB0aGUgc2FtZSBhcyB5b3VyIHVzZXIgSUQuXDxiclw+DQombmJzcFw7ICZuYnNwXDstIFlvdSB3aWxsIGJlIHByb21wdGVkIHRvIGNoYW5nZSB5b3VyIHBhc3N3b3JkIGFuZCB0byBjaG9vc2UgKGFuZCBhbnN3ZXIpIGEgc2VjdXJpdHkgcXVlc3Rpb24uXDxiclw+DQombmJzcFw7ICZuYnNwXDstIE9uY2UgeW91ciBwYXNzd29yZCBoYXMgYmVlbiBjaGFuZ2VkLCB5b3Ugd2lsbCBiZSBhc2tlZCB0byBsb2cgYmFjayBpbiB1c2luZyB5b3VyIG5ldyBwYXNzd29yZC5cPGJyXD5cPGJyXD4NCklmIHlvdSBmb3JnZXQgeW91ciBwYXNzd29yZDpcPGJyXD4NCiZuYnNwXDsgJm5ic3BcOy0gRW50ZXIgeW91ciB1c2VyIElELCBhbmQgcHJlc3MgdGhlICdmb3Jnb3QgcGFzc3dvcmQnIGJ1dHRvbi5cPGJyXD4NCiZuYnNwXDsgJm5ic3BcOy0gWW91IHdpbGwgYmUgYXNrZWQgdG8gYW5zd2VyIHRoZSBzZWN1cml0eSBxdWVzdGlvbiB5b3UgY2hvc2UgYXQgZmlyc3Qgc2lnbiBvbi5cPGJyXD4NCiZuYnNwXDsgJm5ic3BcOy0gV2hlbiB5b3VyIHNlY3VyaXR5IHF1ZXN0aW9uIGhhcyBiZWVuIGNvcnJlY3RseSBhbnN3ZXJlZCwgeW91ciBwYXNzd29yZCB3aWxsIGJlIHJlc2V0IHRvIG1hdGNoIHlvdXIgdXNlciBJRC5cPGJyXD4NCiZuYnNwXDsgJm5ic3BcOy0gTG9nIEluIHVzaW5nIHlvdXIgVXNlciBJRCBhcyB5b3VyIHBhc3N3b3JkIGFuZCB5b3UgbWF5IGNyZWF0ZSBhIG5ldyBwYXNzd29yZCBhbmQgc2VjdXJpdHkgcXVlc3Rpb24gYW5kIGFuc3dlci5cPGJyXD5cPGJyXD4NCg0KSWYgeW91IG5lZWQgYXNzaXN0YW5jZSB3aXRoIGxvZ2dpbmcgaW50byB0aGUgc3lzdGVtLCBwbGVhc2UgY29udGFjdCB1cyBhdDogKDU4NSkgNzc3IOKAkyA2NDk0Lg0KXDwvRk9OVFw+Oz4+Ozs+Oz4+Oz4+Oz4+Oz4wTLoJV+h+EvxCdTT8JdQ3+0v/uA=='),
-			('_Login1:txtUserID', USERNAME),
-			('_Login1:txtPwd', PASSWORD),
-			('_Login1:btnLogin', 'Login'),
+			('__EVENTVALIDATION', '/wEWBQL/3fXjBgLT8dy8BQK1qbSRCwKC3IeGDALWxaLXDBtR9wjvMd+nFEAjQyTzCoNLo7ZP'),
+			('__VIEWSTATE', '/wEPDwULLTE1MjQ5MjU3NjkPZBYCZg9kFggCAQ9kFgQCAQ9kFgJmDw8WBB4MQmFja0ltYWdlVXJsBQ8uLi9Mb2dvL2RkaS5naWYeBF8hU0ICgIAEZBYCAgEPDxYCHgdWaXNpYmxlaGRkAgUPZBYKZg8PFgQeBFRleHQFBEhlbHAeC05hdmlnYXRlVXJsBRQvZGRpYXJjaGl2ZS8uLlxoZWxwXGRkAgEPDxYCHwJoZGQCAg8PFgIfAmhkZAIDDxQrAANkPCsAFAMAFhQeCkpTRmlsZU5hbWVlHgxXZWJNZW51U3R5bGULKagBSW5mcmFnaXN0aWNzLldlYlVJLlVsdHJhV2ViTmF2aWdhdG9yLldlYk1lbnVTdHlsZSwgSW5mcmFnaXN0aWNzMzUuV2ViVUkuVWx0cmFXZWJOYXZpZ2F0b3IudjguMiwgVmVyc2lvbj04LjIuMjAwODIuMTAwMCwgQ3VsdHVyZT1uZXV0cmFsLCBQdWJsaWNLZXlUb2tlbj03ZGQ1YzMxNjNmMmNkMGNiAB4IRW5oYW5jZWRnHhZUb3BMZXZlbEhvdmVySXRlbUNsYXNzBTlpZ184N2ZmZWIzOF9yMTAgVG9wTGV2ZWxIb3Zlckl0ZW1TdHlsZSBNZW51SG92ZXJJdGVtU3R5bGUeD1BhcmVudEl0ZW1DbGFzc2UeF1RvcExldmVsUGFyZW50SXRlbUNsYXNzBRdUb3BMZXZlbFBhcmVudEl0ZW1TdHlsZR4OQm9yZGVyQ29sbGFwc2VnHhVUb3BMZXZlbExlYWZJdGVtQ2xhc3NlHg9Db21wb25lbnRUYXJnZXQLKasBSW5mcmFnaXN0aWNzLldlYlVJLlVsdHJhV2ViTmF2aWdhdG9yLkNvbXBvbmVudFRhcmdldCwgSW5mcmFnaXN0aWNzMzUuV2ViVUkuVWx0cmFXZWJOYXZpZ2F0b3IudjguMiwgVmVyc2lvbj04LjIuMjAwODIuMTAwMCwgQ3VsdHVyZT1uZXV0cmFsLCBQdWJsaWNLZXlUb2tlbj03ZGQ1YzMxNjNmMmNkMGNiAh4NTGVhZkl0ZW1DbGFzc2UGFgALFggeCENzc0NsYXNzBQ5TZXBhcmF0b3JDbGFzcx4BQQUOaWdfbWVudVNlcC5naWYeAUIFHGJhY2tncm91bmQtcmVwZWF0OnJlcGVhdC14OyAfAQICZGQCBA8PFgIfAmhkZAIDD2QWAgILDxAPFgIfAmhkZBYAZAIFD2QWAgIHDw8WAh8DZWRkAgcPFgIfAwWaCjxGT05UIGZhY2U9QXJpYWwgc2l6ZT0yPldlbGNvbWUgdG8geW91ciBQYXlyb2xsIFJlY29yZHMgUmVwb3NpdG9yeSBhdCA8Yj5NWVBBWVNUVUIuaW5mbzwvYj4uPGJyPjxicj5Zb3VyIGxvZ2luIHVzZXIgSUQgY29uc2lzdHMgb2YgKGluIGFsbCBsb3dlciBjYXNlKTxicj4NCiZuYnNwOyAmbmJzcDstIFRoZSBmaXJzdCBsZXR0ZXIgb2YgeW91ciBmaXJzdCBuYW1lPGJyPg0KJm5ic3A7ICZuYnNwOy0gVGhlIGZpcnN0IHRocmVlIGxldHRlcnMgb2YgeW91ciBsYXN0IG5hbWUgKG9yIGZpcnN0IHR3byBpZiB5b3UgaGF2ZSBhIDItbGV0dGVyIGxhc3QgbmFtZSk8YnI+DQombmJzcDsgJm5ic3A7LSBUaGUgbGFzdCBmb3VyIG51bWJlcnMgb2YgeW91ciBzb2NpYWwgc2VjdXJpdHkgbnVtYmVyLjxicj48YnI+DQpVcG9uIGZpcnN0IGxvZ2luOjxicj4NCiZuYnNwOyAmbmJzcDstIFlvdXIgaW5pdGlhbCBwYXNzd29yZCBpcyB0aGUgc2FtZSBhcyB5b3VyIHVzZXIgSUQuPGJyPg0KJm5ic3A7ICZuYnNwOy0gWW91IHdpbGwgYmUgcHJvbXB0ZWQgdG8gY2hhbmdlIHlvdXIgcGFzc3dvcmQgYW5kIHRvIGNob29zZSAoYW5kIGFuc3dlcikgYSBzZWN1cml0eSBxdWVzdGlvbi48YnI+DQombmJzcDsgJm5ic3A7LSBPbmNlIHlvdXIgcGFzc3dvcmQgaGFzIGJlZW4gY2hhbmdlZCwgeW91IHdpbGwgYmUgYXNrZWQgdG8gbG9nIGJhY2sgaW4gdXNpbmcgeW91ciBuZXcgcGFzc3dvcmQuPGJyPjxicj4NCklmIHlvdSBmb3JnZXQgeW91ciBwYXNzd29yZDo8YnI+DQombmJzcDsgJm5ic3A7LSBFbnRlciB5b3VyIHVzZXIgSUQsIGFuZCBwcmVzcyB0aGUgJ2ZvcmdvdCBwYXNzd29yZCcgYnV0dG9uLjxicj4NCiZuYnNwOyAmbmJzcDstIFlvdSB3aWxsIGJlIGFza2VkIHRvIGFuc3dlciB0aGUgc2VjdXJpdHkgcXVlc3Rpb24geW91IGNob3NlIGF0IGZpcnN0IHNpZ24gb24uPGJyPg0KJm5ic3A7ICZuYnNwOy0gV2hlbiB5b3VyIHNlY3VyaXR5IHF1ZXN0aW9uIGhhcyBiZWVuIGNvcnJlY3RseSBhbnN3ZXJlZCwgeW91ciBwYXNzd29yZCB3aWxsIGJlIHJlc2V0IHRvIG1hdGNoIHlvdXIgdXNlciBJRC48YnI+DQombmJzcDsgJm5ic3A7LSBMb2cgSW4gdXNpbmcgeW91ciBVc2VyIElEIGFzIHlvdXIgcGFzc3dvcmQgYW5kIHlvdSBtYXkgY3JlYXRlIGEgbmV3IHBhc3N3b3JkIGFuZCBzZWN1cml0eSBxdWVzdGlvbiBhbmQgYW5zd2VyLjxicj48YnI+DQoNCklmIHlvdSBuZWVkIGFzc2lzdGFuY2Ugd2l0aCBsb2dnaW5nIGludG8gdGhlIHN5c3RlbSwgcGxlYXNlIGNvbnRhY3QgdXMgYXQ6ICg1ODUpIDc3NyDigJMgNjQ5NC4NCjwvRk9OVD5kZKf9HPDzLobuac6BHUEBInstenU4'),
+			('txtUserID', USERNAME),
+			('txtPassword', PASSWORD),
+			('btnLogin', 'Login'),
 		))
 	)
-	auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.1')
+	auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.2')
 	data = mechanize.urlopen(auth)
 except Exception, e:
 	print >>sys.stderr, \
@@ -93,7 +97,7 @@ except Exception, e:
 
 try:
 	auth = Request('https://%s.mypaystub.info/ddiarchive/welcome.aspx?acttype=test' % COMPANY)
-	auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.1')
+	auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.2')
 	data = mechanize.urlopen(auth)
 
 	soup = BeautifulSoup(''.join(data.fp.readlines()))
@@ -108,7 +112,7 @@ if next[0] != '/':
 
 try:
 	auth = Request('https://%s.mypaystub.info/%s' % (COMPANY, next))
-	auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.1')
+	auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.2')
 	data = mechanize.urlopen(auth)
 except Exception, e:
 	print >>sys.stderr, 'Unable to retrieve document list: %s' % str(e)
@@ -144,7 +148,7 @@ if next[0] != '/':
 
 try:
 	auth = Request('https://%s.mypaystub.info/%s' % (COMPANY, next))
-	auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.1')
+	auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.2')
 	data = mechanize.urlopen(auth)
 except Exception, e:
 	print >>sys.stderr, 'Unable to retrieve intermediate page: %s' % str(e)
@@ -154,7 +158,7 @@ for tup in cgi.parse_qsl(next.split('?', 1)[1]):
 	if tup[0] == 'documentid':
 		try:
 			auth = Request('https://%s.mypaystub.info/DDIAssetViewer/DocumentView/viewdocmain.aspx?page=%s' % (COMPANY, quote_plus(tup[1])))
-			auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.1')
+			auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.2')
 			data = mechanize.urlopen(auth)
 		except Exception, e:
 			print >>sys.stderr, 'Unable to retrieve pay stub: %s' % str(e)
