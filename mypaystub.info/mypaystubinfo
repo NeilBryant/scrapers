@@ -157,7 +157,7 @@ except Exception, e:
 for tup in cgi.parse_qsl(next.split('?', 1)[1]):
 	if tup[0] == 'documentid':
 		try:
-			auth = Request('https://%s.mypaystub.info/DDIAssetViewer/DocumentView/viewdocmain.aspx?page=%s' % (COMPANY, quote_plus(tup[1])))
+			auth = Request('https://%s.mypaystub.info/AssetViewer/DocumentView/viewdocmain.aspx?page=%s' % (COMPANY, quote_plus(tup[1])))
 			auth.add_header('User-Agent', 'mypaystub.info scraper v1.1.2')
 			data = mechanize.urlopen(auth)
 		except Exception, e:
