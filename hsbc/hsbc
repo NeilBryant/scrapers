@@ -133,12 +133,20 @@ br.form.action = 'https://%s/1/2/?idv_cmd=idv.Authentication' % host
 br.form.method = 'POST'
 
 br['memorableAnswer'] = PASSWORD
+buildup = ''
 for control in br.form.controls:
 	if control.name == 'password':
-		control.value = PASSWORD_FAKE_KEYBOARD
-		break
-else:
-	sys.exit('Unable to find PASSWORD_FAKE_KEYBOARD field, has %s changed?' % host)
+		control.readonly = False
+
+	if not control.id or control.disabled == True:
+		continue
+	if not re.search(r'^pwd_\d+$', control.id):
+		continue
+
+	num = int(re.sub(r'^pwd_(\d+)$', r'\1', control.id))
+	control.value = PASSWORD_FAKE_KEYBOARD[num - 1]
+	buildup += control.value
+br['password'] = buildup
 
 try:
 	r = br.submit()
@@ -164,7 +172,8 @@ soup = parser.parse(r.get_data())
 balances = {}
 for account in ACCOUNTS:
 	try:
-		balance = soup.find(text=account).findParent(name='tr').\
+		balance = soup.find(text=re.compile(r'^\s*' + account + '\s*$')).\
+			findParent(name='tr').\
 			find(text=re.compile(r'\$([0-9,]+\.[0-9]{2})'))
 	except:
 		sys.exit('Unable to retrieve balance, has %s changed?' % host)
