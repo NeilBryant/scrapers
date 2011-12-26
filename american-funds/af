@@ -120,52 +120,43 @@ while retirement.parent:
 		out.write('af-roth %s\n' % balance.replace('$', '').replace(',', ''))
 		break
 
-def funds(soup, header, next=True):
-	header = soup.find(text=header)
-	if not header:
-		return []
+def funds(soup, num):
+	module = soup.find(id='account-module-%d' % num)
 
-	while header.parent:
-		header = header.parent
-
-		find_attrs = {'class': re.compile(r'(\s+|^\s*)account-register(\s+|$)')}
-		if next:
-			register = header.findNextSibling(attrs=find_attrs)
-		else:
-			register = header.findPreviousSibling(attrs=find_attrs)
-		if not register:
-			continue
-
-		funds = register.findAll(
-			'a', attrs={'href': re.compile(r'/funds/details')})
-		if funds:
-			return funds
+	funds = module.findAll(
+		'a', attrs={'href': re.compile(r'/account/deferred/snapshot')})
+	if funds:
+		return funds
 	return []
 
-for fund in funds(soup, re.compile(r'^\s*Retirement accounts\s*$')):
-	name = fund.find(text=True)
-
+def balance(fund):
 	while fund.parent:
 		fund = fund.parent
-		balance = fund.find(text=re.compile(r'^\$[\d,.]+$'))
-		if balance:
-			out.write('%s-roth %s\n' % (
-				name.lower().replace(' ', '_')[:9],
-				balance.replace('$', '').replace(',', '')
-			))
-			break
+		balance = fund.findAll(text=re.compile(r'^\$[\d,.]+$'))
+		if not balance:
+			continue
 
-for fund in funds(soup, re.compile(r'^\s*Retirement accounts\s*$'), False):
+		# The highest value is probably the balance,
+		# the lowest probably the share price.
+		balance = max([
+			float(bal.replace('$', '').replace(',', ''))
+			for bal
+			 in balance
+		])
+		return balance
+
+for fund in funds(soup, 0):
 	name = fund.find(text=True)
+	out.write('%s %s\n' % (
+		name.lower().replace(' ', '_')[:9],
+		balance(fund),
+	))
 
-	while fund.parent:
-		fund = fund.parent
-		balance = fund.find(text=re.compile(r'^\$[\d,.]+$'))
-		if balance:
-			out.write('%s %s\n' % (
-				name.lower().replace(' ', '_')[:9],
-				balance.replace('$', '').replace(',', '')
-			))
-			break
+for fund in funds(soup, 1):
+	name = fund.find(text=True)
+	out.write('%s-roth %s\n' % (
+		name.lower().replace(' ', '_')[:9],
+		balance(fund),
+	))
 
 out.close()
