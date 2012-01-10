@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# amex.py - (c) 2008-2011 Matthew J Ernisse <mernisse@ub3rgeek.net>
+# amex.py - (c) 2008-2012 Matthew J Ernisse <mernisse@ub3rgeek.net>
 #
 # Redistribution and use in source and binary forms, 
 # with or without modification, are permitted provided 
@@ -44,15 +44,15 @@ from urllib2 import HTTPError
 # be owner-readable ONLY because of the cleartext credentials.  The script 
 # DOES NOT check, it is up to YOU.
 #
-USERNAME = ''
-PASSWORD = ''
+USERNAME = ""
+PASSWORD = ""
 
 #
 # If you simply change BASE to the path to this script, it will be used
 # for all the files created / used by this script.  You can customize the 
 # files individually if you like.
 #
-BASE=''
+BASE=""
 
 #
 # Set AMEX_TAB if you want to write a tab file down.
@@ -86,10 +86,9 @@ COOKIE=BASE + "/amexcookie.txt"
 
 # End User Configuration
 
-start_page = "https://home.americanexpress.com/home/axpi/"
-action_page = "https://www99.americanexpress.com/myca/logon/us/action?request_type=LogLogonHandler&location=us_pre1_cards";
-dest_page = "https://online.americanexpress.com/myca/acctsumm/us/action?request_type=authreg_acctAccountSummary&entry_point=lnk_homepage&aexp_nav=sc_checkbill&referrer=ushome&section=login";
-
+start_page = "https://www.americanexpress.com/"
+action_page = "https://online.americanexpress.com/myca/logon/us/action?request_type=LogLogonHandler&location=us_pre1_cards"
+dest_page = "https://online.americanexpress.com/myca/acctsumm/us/action?request_type=authreg_acctAccountSummary&entry_point=lnk_homepage&aexp_nav=sc_checkbill&referrer=ushome&section=login"
 
 if not USERNAME or not PASSWORD:
 	print "Please edit this file and follow the directions in the comments"
@@ -116,7 +115,7 @@ br.addheaders = [
 
 br.set_cookiejar(cj)
 br.set_handle_robots(False)
-br.set_handle_refresh(True, 10, True)
+br.set_handle_refresh(True, 30, True)
 br.set_handle_redirect(True)
 
 #

@@ -1,6 +1,6 @@
-#!/usr/bin/python
+#!/usr/bin/python -tt
 #
-# cnb.py - (c) 2007...2009 Matthew J Ernisse <mernisse@ub3rgeek.net>
+# cnb.py - (c) 2007 - 2012 Matthew J Ernisse <mernisse@ub3rgeek.net>
 #
 # Redistribution and use in source and binary forms, 
 # with or without modification, are permitted provided 
@@ -31,9 +31,9 @@
 
 import BeautifulSoup
 import logging
-from rrdtool import *
 import re
 import sys
+import time
 import os
 import mechanize
 import urllib2
@@ -43,73 +43,113 @@ mechanize._urllib2.build_opener(urllib2.HTTPHandler(debuglevel=1))
 
 
 #
+# ======================================================================== 
+# Beginning of user configuration.
+# ======================================================================== 
+#
+
+#
 # Your username / password for the online banking website.  This script should
 # be owner-readable ONLY because of the cleartext credentials.  The script 
 # DOES NOT check, it is up to YOU.
 #
-USERNAME = ""
-PASSWORD = ""
+USERNAME = ''
+PASSWORD = ''
 
-# The challange / response question and answers.  the key is the challange and
-# the value is the answer.  Eg:
-# 'What is the name of your first employer' : 'your mom',
-# this must be a valid python dict assignment
-CHALLANGE = {
+#
+# The new CNBank Online Banking system sets a magic cookie to identify your
+# browser.  The autnetication method requires a two-factor code so you will
+# need to fetch the cookie from your browser and update this dict with the
+# information.
+#
+COOKIE = {
+	'name': '',
+	'value': '',
 }
+
+#
+# This needs to be set to th EXACT user-agent string used to generate this cookie.
+# The webpage fingerprints your browser with a Flash application and if you don't
+# run the fingerprint app it appears to fall back to user-agent checking.
+#
+USERAGENT = ''
 
 #
 # If you simply change BASE to the path to this script, it will be used
 # for all the files created / used by this script.  You can customize the 
 # files individually if you like.
 #
-BASE=os.path.dirname(sys.argv[0])
+BASE=''
+
 #
-# Set your e-mail address here, this goes into the user-agent so your bank
-# can e-mail you if they don't like you scraping them.
+# If you wish to enable debug output, change this to True.
 #
-OWNER='mernisse@ub3rgeek.net'
+DEBUG=None
 
 #
 # You can setup your proxys here, if you do so, please uncomment the
 # proxy block below.
 #
 proxy = { 
-	"https": None,
-	"http": None,
-	 }
+	'https': '',
+	'http': '',
+}
 
 #
-# You can change these if you like, though you shouldn't need to.
+# If you set RRD, this will try to use the rrd.py lib to update a RRD
+# with the information.
 #
-RRD=BASE + "/cnb-balance.rrd"
-COOKIE=BASE + "/cnbcookie.txt"
+RRD=''
 
-# End User Configuration
-host = "cnbsec1.cnbank.com"
+#
+# TODO: support TAB output.
+#
+TAB=''
 
-start_page = "https://cnbsec1.cnbank.com/CAN_40/Common/SignOn/Start.asp"
-landing_page = "https://cnbsec1.cnbank.com/CAN_40/Common/Accounts/Accounts.asp"
+#
+# ======================================================================== 
+# End of user configuration.
+# ======================================================================== 
+#
 
-if not USERNAME or not PASSWORD or not CHALLANGE or not OWNER:
-	print "Please edit this file and follow the directions in the comments"
-	print "\n"
-	sys.exit(0)
+if RRD:
+	try:
+		from rrd import *
+	except ImportError:
+		print 'E: RRD is set and rrd module not imported successfully.'
+		sys.exit(1)
+
+start_page = "https://online.cnbank.com/CNB_Online/Authentication/Login.aspx"
+
+if not USERNAME \
+	or not PASSWORD \
+	or not COOKIE['name'] \
+	or not COOKIE['value'] \
+	or not USERAGENT:
+	print 'Please edit this file and follow the directions in the comments.'
+	sys.exit(1)
 
 br = mechanize.Browser()
-cj = mechanize.LWPCookieJar()
 
-try:
-	cj.revert(COOKIE)
-except:
-	pass
+cj = mechanize.CookieJar()
+cj.set_cookie(mechanize.Cookie(
+	None,
+	COOKIE['name'], COOKIE['value'], None, False,
+	'online.cnbank.com', True, True, 
+	'/', True, True, int(time.time()) + 86400, False, None, None, None
+))
 
 br.addheaders = [ 
-	("User-agent", "Mozilla/5.0 (X11; U; i386; " + OWNER + ")"),
-	]
-#
-#if proxy:
-#	br.set_proxies(proxy)
-#
+	('User-agent', USERAGENT)
+]
+
+
+if proxy['http'] and proxy['https']:
+	if DEBUG:
+		print 'Setting Proxy.'
+	br.set_proxies(proxy)
+
+
 br.set_cookiejar(cj)
 br.set_handle_robots(False)
 br.set_handle_refresh(True, 10, True)
@@ -118,75 +158,81 @@ br.set_handle_redirect(True)
 #
 # Debug
 #
-#br.set_debug_http(True)
-#br.set_debug_responses(True)
-#br.set_debug_redirects(True)
-#logger = logging.getLogger("mechanize")
-#logger.addHandler(logging.StreamHandler(sys.stdout))
-#logger.setLevel(logging.DEBUG)
+if DEBUG == True:
+	br.set_debug_http(True)
+	br.set_debug_responses(True)
+	br.set_debug_redirects(True)
+	logger = logging.getLogger("mechanize")
+	logger.addHandler(logging.StreamHandler(sys.stdout))
+	logger.setLevel(logging.DEBUG)
 
 try:
+	if DEBUG:
+		print 'I: Trying to open ', start_page
+
 	br.open(start_page)
 except HTTPError, e:
 	print str(e)
 	sys.exit(1)
 
-cj.save(COOKIE)
 assert br.viewing_html()
-br.select_form('form1')
-br["SignOnID"] = USERNAME 
-br["Password"] = PASSWORD
+br.select_form('q2online')
+
+forms = list(br.forms())
+forms[0].set_all_readonly(False)
+
+br["q2oLoginID"] = USERNAME 
+br["q2oPassword"] = PASSWORD
+br["_action"] = "submit"
+br['q2_1'] = ''
+br['q2_2'] = ''
 
 try:
+	if DEBUG:
+		print ' ===== Trying to submit login form ====='
+
 	r = br.submit()
-	cj.save(COOKIE)
-except HTTPError, e:
-	print str(e)
-	sys.exit(1)
-except URLError, e:
-	print str(e)
+
+	if DEBUG:
+		print ' ===== End login form ====='
+	
+except (HTTPError, URLError),  e:
+	print 'E: Failed submitting login form: ', str(e)
 	sys.exit(1)
 
 try:
 	soup = BeautifulSoup.BeautifulSoup(r.get_data())
 except Exception, e:
-	print "Caught Exception %s" % ( str(e) )
+	print 'E: Caught exception: ', str(e)
 	print r.get_data()
 	sys.exit(1)
 
-question = str(soup.findAll('div', attrs={'class': 'comodotfInput'})[0])
-question = re.search(r'Question: (.*)\?', question, re.I).groups()[0]
-answer = ''
 
-for k,v in CHALLANGE.iteritems():
-	print k
-	if re.search(k, question, re.I):
-		answer = v
-		break
-else:
-	print "Could not find a match for %s in CHALLANGE." % (question)
-	sys.exit(1)
-
-br.select_form(nr=0)
-br['answer'] = answer
-
-r = br.submit()
+# 
+# <td class="c3"> is the Available Balance column.
+# <td class="c4"> is the Current Balance column.
+#
+balances = []
 
 try:
-	r = br.open(landing_page)
-except HTTPError, e:
-	print str(e)
+	for v in soup.findAll('td', attrs={'class': 'c3'}):
+		balances.append(re.sub(r'[$,]', '', v.string))
+except Exception, e:
+	print 'E: Exception parsing balances: ', str(e)
 	sys.exit(1)
 
-page = r.get_data()
+#
+# balances is now a list of balances, one for each account and the last for your total.
+#
 
-accounts = []
+if DEBUG:
+	print balances
 
-for balance in re.findall("\$([\d,]+[\d\.]+[\d]{2})", page):
-	accounts.append(balance.replace(",",""))
-
-# balance is now  a list of balances	
-# The first one is the checking account available balance.
+#
+# XXX: TODO - support TAB output.
+#
+if not RRD:
+	sys.exit(0)
 
 cnb_rrd = RoundRobinDatabase(RRD)
 
@@ -197,4 +243,8 @@ if not os.path.exists(RRD):
 		RoundRobinArchive(cf=LastCF, xff=0, steps=1, rows=6570),
 		step=7200)
 
-cnb_rrd.update(Val(accounts[0]), t=['checking'])
+try:
+	cnb_rrd.update(Val(balances[0]), t=['checking'])
+except Exception, e:
+	print 'E: Could not update RRD: ', str(e)
+
