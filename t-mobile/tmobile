@@ -206,6 +206,7 @@ for bill in soup.findAll(text=re.compile(r'Bill\s+date:')):
 				raise Exception('Unable to locate bill cycle selection URL for %s.' % date)
 			continue
 		url = view.findParent('a')['href']
+		break
 
 	bill_links[date] = url
 
