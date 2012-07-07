@@ -124,7 +124,7 @@ def funds(soup, num):
 	module = soup.find(id='account-module-%d' % num)
 
 	funds = module.findAll(
-		'a', attrs={'href': re.compile(r'/account/deferred/snapshot')})
+		'a', attrs={'href': re.compile(r'/funds/details\.htm')})
 	if funds:
 		return funds
 	return []
