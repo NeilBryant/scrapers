@@ -56,7 +56,7 @@ QUESTIONS = {
 BASE=os.path.dirname(sys.argv[0])
 
 #
-# Set FIDELITY_TAB if you want to write a tab file down.
+# Set VANGUARD_TAB if you want to write a tab file down.
 # This prevents the RRD from being updated.
 #
 VANGUARD_TAB=None
@@ -101,7 +101,7 @@ def tabify(str):
 
 
 start_page = 'https://personal.vanguard.com/us/home'
-portfolio_page = 'https://personal.vanguard.com/us/TPView?originPage=MYHOME'
+balance_page = 'https://personalp.vanguard.com/us/TPView'
 
 
 if not USERNAME or not PASSWORD or not OWNER or not QUESTIONS:
@@ -214,7 +214,8 @@ except HTTPError, e:
 #
 # get portfolio total
 #
-r = br.open(portfolio_page)
+
+r = br.open(balance_page)
 
 try:
 	soup = BeautifulSoup.BeautifulSoup(r.get_data())
@@ -223,8 +224,8 @@ except Exception, e:
 	print r.get_data()
 	sys.exit(1)
 
-portfolio = soup.findAll('table', attrs={'class': 'dataTable pad '})
-portfolio = portfolio[0].findAll('td', attrs={'class': 'nr'})[7].string
+portfolio = soup.findAll('td', attrs={'class': 
+	'nowrap nr right noBotBorder padRight padLeft noPadBottom'})[0].string
 
 total = sanitize(portfolio)
 
@@ -240,7 +241,7 @@ if VANGUARD_TAB:
 	fd.close()
 	sys.exit(0)
 
-from rrdtool import *
+from rrd import *
 rrd = RoundRobinDatabase(RRD)
 
 if not os.path.exists(RRD):
@@ -250,7 +251,7 @@ if not os.path.exists(RRD):
 		RoundRobinArchive(cf=LastCF, xff=0, steps=1, rows=6570),
 		step=7200)
 try:
-	rrd.update(Val(total), t=['total'])
+	rrd.update(Val(total), t=['balance'])
 except Exception, e:
 	print "Cannot update RRD, %s" % (str(e))
 
