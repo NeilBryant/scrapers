@@ -210,6 +210,9 @@ for bill in soup.findAll(attrs={'class': 'billCycleListDetails'}):
 		url = re.sub(r'.*location.assign\s*\(["\']([^"\']+)["\'].*', r'\1', view['onclick'])
 		break
 
+	if url.startswith('javascript:'):
+		bill_id = re.sub(r'.*\((\d+)\).*', r'\1', url)
+		url = 'onPrintBill.do?id=%s' % bill_id
 	bill_links[date] = url
 
 if LIST_ALL:
