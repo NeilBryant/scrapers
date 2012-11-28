@@ -186,28 +186,30 @@ if not br.viewing_html():
 soup = BeautifulSoup.BeautifulSoup(r.get_data())
 
 bill_links = {}
-for bill in soup.findAll(attrs={'class': 'billCycleListDetails'}):
+for bill in soup.find(id='billset').findAll('tr'):
 	date = bill.find(text=re.compile(r'\w{3} \w{3} \d{2} \d{2}:\d{2}:\d{2} \w{3} \d{4}'))
 	if not date:
 		raise Exception('Unable to parse date for bill %s' % bill)
 
 	# Remove the time zone; we only care about the date,
 	# and strptime() won't parse EST/PDT/etc zone names.
+	date = date.strip()
 	date = re.sub(r' \w{3}( \d{4})$', r'\1', date)
 	date = time.strptime(date)
 
 	while bill.parent:
 		bill = bill.parent
 
-		view = bill.find(attrs={'class': 'billPrintIcon'})
+		view = bill.find(attrs={'class': 'arrowlink'})
 		if not view:
-			if bill.name == 'li':
+			if bill.name == 'table':
 				# If we go up further, we risk catching the bill URL for
 				# a different month.
 				raise Exception('Unable to locate bill cycle selection URL for %s.' % date)
 			continue
 
-		url = re.sub(r'.*location.assign\s*\(["\']([^"\']+)["\'].*', r'\1', view['onclick'])
+		url = re.sub(r'.*location.href\s*\(["\']([^"\']+)["\'].*',
+			r'\1', view['onclick'])
 		break
 
 	if url.startswith('javascript:'):
