@@ -1,7 +1,7 @@
 #!/usr/bin/python -tt
 
-# American Funds account balance scraper v1.2
-# Copyright (c) 2007-9, John Morrissey <jwm@horde.net>
+# American Funds account balance scraper v1.2.1
+# Copyright (c) 2007-9, 2011-12, John Morrissey <jwm@horde.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of Version 2 of the GNU General Public License as
@@ -58,7 +58,7 @@ if USERNAME == None or PASSWORD == None or QUESTIONS == None or AF_TAB == None:
 	sys.exit(1)
 
 
-auth = Request('https://www.americanfunds.com/account/login.htm',
+auth = Request('https://www.americanfunds.com/account/login.external.html',
 	urlencode((
 		('action', 'login'),
 		('loginId', USERNAME),
@@ -74,7 +74,11 @@ if 'routine site maintenance' in body or \
 	print 'americanfunds.com is unavailable.'
 	sys.exit(1)
 
-soup = BeautifulSoup(body)
+# HTMLParser has trouble parsing some of the JavaScript bits:
+#   HTMLParser.HTMLParseError: malformed start tag, at line 732, column 35
+strip_script = re.compile(r'<script\s+.*?</script>', re.I + re.S)
+
+soup = BeautifulSoup(strip_script.sub('', body))
 question = soup.find('label', attrs={'for': 'challengeQuestion'})
 if question:
 	question = BeautifulStoneSoup(
@@ -82,7 +86,7 @@ if question:
 		convertEntities=BeautifulStoneSoup.HTML_ENTITIES).contents[0]
 	question_id = soup.find('input', attrs={'name': 'challengeQuestionId'})['value']
 
-	auth = Request('https://www.americanfunds.com/account/login/challenge-question.htm',
+	auth = Request('https://www.americanfunds.com/account/login/challenge-question.external.html',
 		urlencode((
 			('challengeQuestionId', question_id),
 			('challengeAnswer', QUESTIONS[question]),
@@ -91,14 +95,14 @@ if question:
 	auth.add_header('User-Agent', 'American Funds account balance scraper v1.2')
 	data = mechanize.urlopen(auth)
 
-auth = Request('https://www.americanfunds.com/account/login/password.htm',
+auth = Request('https://www.americanfunds.com/account/login/password.external.html',
 	urlencode((
 		('password', PASSWORD),
 	))
 )
 auth.add_header('User-Agent', 'American Funds account balance scraper v1.2')
 data = mechanize.urlopen(auth)
-soup = BeautifulSoup(''.join(data.fp.readlines()))
+soup = BeautifulSoup(strip_script.sub('', ''.join(data.fp.readlines())))
 
 out = open(AF_TAB, 'w')
 
@@ -124,7 +128,7 @@ def funds(soup, num):
 	module = soup.find(id='account-module-%d' % num)
 
 	funds = module.findAll(
-		'a', attrs={'href': re.compile(r'/funds/details\.htm')})
+		'a', attrs={'href': re.compile(r'/funds/details')})
 	if funds:
 		return funds
 	return []
