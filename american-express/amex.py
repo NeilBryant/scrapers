@@ -51,30 +51,30 @@ proxy = {
 
 DEBUG = None
 OWNER = ''
-PASSWORD = ''
 RRD = ''
 TAB = ''
+
+# These must be set.
 USERNAME = ''
+PASSWORD = ''
 
 def Usage():
 	print 'American Express account balance scraper'
-	print "Usage: %s [-dh] [-r file] [-t file] -o email -u username -p password" % (
+	print "Usage: %s [-dh] [-r file] [-t file] -o email" % (
 		os.path.basename(sys.argv[0])
 	)
 	print
 	print ' -d				turn on debug mode'
 	print ' -h 				display this usage and exit'
 	print ' -o email			specify the owner\'s e-mail address'
-	print ' -p password			your password'
 	print ' -r file				update this rrd file'
 	print ' -t file 			update this tab file'
-	print ' -u username			your username'
 	print
 	print ' You can setup HTTP/HTTPS proxies by editing the script file'
 	sys.exit(0)
 
 try:
-	options, arguments = getopt(sys.argv[1:], 'dho:p:r:t:u:')
+	options, arguments = getopt(sys.argv[1:], 'dho:r:t:')
 except GetoptError, e:
 	print str(e)
 	Usage()
@@ -90,14 +90,10 @@ for opts, args in options:
 		Usage()
 	elif opts == '-o':
 		OWNER = args
-	elif opts == '-p':
-		PASSWORD = args
 	elif opts == '-r':
 		RRD = args
 	elif opts == '-t':
 		TAB = args
-	elif opts == '-u':
-		USERNAME = args
 
 if not USERNAME or not PASSWORD or not OWNER:
 	Usage()
