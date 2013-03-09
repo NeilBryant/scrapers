@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# amex.py - (c) 2008-2012 Matthew J Ernisse <mernisse@ub3rgeek.net>
+# amex.py - (c) 2008-2013 Matthew J Ernisse <mernisse@ub3rgeek.net>
 #
 # Redistribution and use in source and binary forms, 
 # with or without modification, are permitted provided 
@@ -36,84 +36,89 @@ import os
 import mechanize
 
 import BeautifulSoup
-from rrd import *
+from getopt import getopt, GetoptError
 from urllib2 import HTTPError
-
-#
-# Your username / password for the online banking website.  This script should
-# be owner-readable ONLY because of the cleartext credentials.  The script 
-# DOES NOT check, it is up to YOU.
-#
-USERNAME = ""
-PASSWORD = ""
-
-#
-# If you simply change BASE to the path to this script, it will be used
-# for all the files created / used by this script.  You can customize the 
-# files individually if you like.
-#
-BASE=""
-
-#
-# Set AMEX_TAB if you want to write a tab file down.
-#
-AMEX_TAB=None
-
-#
-# Set your e-mail address here, this goes into the user-agent so your bank
-# can e-mail you if they don't like you scraping them.
-#
-OWNER=''
-
-
-DEBUG=None
-#DEBUG=True
 
 #
 # You can setup your proxys here, if you do so, please uncomment the
 # proxy block below.
 #
 proxy = { 
-	"https": "",
-	"http": "",
-	 }
-
-#
-# You can change these if you like, though you shouldn't need to.
-#
-RRD=BASE + "/amex-balance.rrd"
-COOKIE=BASE + "/amexcookie.txt"
-
+	'https': '',
+	'http': '',
+}
 # End User Configuration
 
-start_page = "https://www.americanexpress.com/"
-action_page = "https://online.americanexpress.com/myca/logon/us/action?request_type=LogLogonHandler&location=us_pre1_cards"
-dest_page = "https://online.americanexpress.com/myca/acctsumm/us/action?request_type=authreg_acctAccountSummary&entry_point=lnk_homepage&aexp_nav=sc_checkbill&referrer=ushome&section=login"
+DEBUG = None
+OWNER = ''
+RRD = ''
+TAB = ''
 
-if not USERNAME or not PASSWORD:
-	print "Please edit this file and follow the directions in the comments"
-	print "\n"
+# These must be set.
+USERNAME = ''
+PASSWORD = ''
+
+def Usage():
+	print 'American Express account balance scraper'
+	print "Usage: %s [-dh] [-r file] [-t file] -o email" % (
+		os.path.basename(sys.argv[0])
+	)
+	print
+	print ' -d				turn on debug mode'
+	print ' -h 				display this usage and exit'
+	print ' -o email			specify the owner\'s e-mail address'
+	print ' -r file				update this rrd file'
+	print ' -t file 			update this tab file'
+	print
+	print ' You can setup HTTP/HTTPS proxies by editing the script file'
 	sys.exit(0)
 
-br = mechanize.Browser()
-cj = mechanize.LWPCookieJar()
-
 try:
-	cj.revert(COOKIE)
-except:
-	pass
+	options, arguments = getopt(sys.argv[1:], 'dho:r:t:')
+except GetoptError, e:
+	print str(e)
+	Usage()
+	sys.exit(1)
+
+if not options:
+	Usage()
+
+for opts, args in options:
+	if opts == '-d':
+		DEBUG = True
+	elif opts == '-h':
+		Usage()
+	elif opts == '-o':
+		OWNER = args
+	elif opts == '-r':
+		RRD = args
+	elif opts == '-t':
+		TAB = args
+
+if not USERNAME or not PASSWORD or not OWNER:
+	Usage()
+
+if RRD:
+	try:
+		from rrd import *
+	except ImportError:
+		print 'E: RRD set, yet failed importing rrd.py'
+		sys.exit(1)
+
+start_page = 'https://www.americanexpress.com/'
+action_page = 'https://online.americanexpress.com/myca/logon/us/action?request_type=LogLogonHandler&location=us_pre1_cards'
+dest_page = 'https://online.americanexpress.com/myca/acctsumm/us/action?request_type=authreg_acctAccountSummary&entry_point=lnk_homepage&aexp_nav=sc_checkbill&referrer=ushome&section=login'
+
+br = mechanize.Browser()
 
 br.addheaders = [ 
 	("User-agent", "Mozilla/5.0 (X11; U; Linux i686; en-US; rv 1.0) %s" %
 	               (OWNER)),
 	]
 
-#
-#if proxy:
-#	br.set_proxies(proxy)
-#
+if proxy['http'] or proxy['https']:
+	br.set_proxies(proxy)
 
-br.set_cookiejar(cj)
 br.set_handle_robots(False)
 br.set_handle_refresh(True, 30, True)
 br.set_handle_redirect(True)
@@ -137,7 +142,6 @@ try:
 except HTTPError, e:
 	sys.exit("%d: %s" % (e.code, e.msg))
 
-cj.save(COOKIE)
 assert br.viewing_html()
 br.select_form('ssoform')
 br["UserID"] = USERNAME 
@@ -156,45 +160,77 @@ try:
 		print "Trying to submit login form"
 
 	r = br.submit()
-#	cj.save(COOKIE)
 except HTTPError, e:
 	sys.exit("%d: %s" % (e.code, e.msg))
 
+# Amex's page is all javascripted up now, so lets try the mobile
+try:
+	if DEBUG:
+		print "Trying to fetch mobile page"
+
+	r = br.open("https://online.americanexpress.com/myca/mobl/us/CardList.do")
+
+except HTTPError, e:
+	sys.exit("%d: %s" % (e.code, e.msg))
 
 try:
 	soup = BeautifulSoup.BeautifulSoup(r.get_data())
+	balances =  soup.findAll('dl', attrs={
+		"id" : "cd"
+	})[0].findAll('dt')
+
+
+	balance = balances[5].string.strip()
+	balance = re.search(r'\$([0-9,\.]+)', balance, re.I)
+	balance = balance.group(0)
+	balance = balance.replace("$", "").replace(",", "")
 except Exception, e:
-	print "Caught Exception %s" % ( str(e) )
-	print r.get_data()
-	sys.exit(1)
-
-balances =  soup.findAll('div', attrs={"class" : "NGBODY3VALUE FINSTABBING" })
-
-try:
-	balance = balances[3].string.strip().replace("$", "").replace(",", "")
-except:
-	print 'could not parse balance'
+	print 'E: Could not parse balance.  Has the page changed? (%s)' % str(e)
 	sys.exit(1)
 
 if not balance:
+	print 'E: balance ended up unset.  Has the page changed?'
 	sys.exit(1)
 
-if AMEX_TAB:
-	fd = open(AMEX_TAB, "w")
-	fd.write("%s\n" % ( balance ))
-	fd.close()
+if TAB:
+	try:
+		fd = open(TAB, "w")
+		fd.write("%s\n" % ( balance ))
+		fd.close()
+	except Exception, e:
+		print 'E: Could not write TAB file: ', str(e)
+		sys.exit(1)
+
+if not RRD:
 	sys.exit(0)
 
 rrd = RoundRobinDatabase(RRD)
 
 if not os.path.exists(RRD):
-	# 1 row per 4 h = 6 rows / day = 2190 rows / year = 6570 / 3y
-	rrd.create(
-		DataSource("balance", type=GaugeDST, heartbeat=14400, min='0', max='100000000'),
-		RoundRobinArchive(cf=LastCF, xff=0, steps=1, rows=6570),
+	try:
+		# 1 row per 4 h = 6 rows / day = 2190 rows / year = 6570 / 3y
+		rrd.create(
+			DataSource(
+				"balance",
+				type=GaugeDST,
+				heartbeat=14400,
+				min='0',
+				max='100000000'
+			),
+		RoundRobinArchive(
+			cf=LastCF,
+			xff=0,
+			steps=1,
+			rows=6570
+		),
 		step=7200)
+	except Exception, e:
+		print 'E: Could not create %s, %s.' % (
+			RRD,
+			str(e)
+		)
+		sys.exit(1)
 try:
 	rrd.update(Val(balance), t=['balance'])
 except Exception, e:
 	print "Cannot update RRD, %s" % (str(e))
-
