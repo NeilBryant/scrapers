@@ -128,11 +128,9 @@ except HTTPError, e:
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for password verification page, has %s changed?' % host)
 
-br.form = br.global_form()
-br.form.action = 'https://%s/1/2/?idv_cmd=idv.Authentication' % host
-br.form.method = 'POST'
-
+br.select_form(predicate=lambda x: x.attrs.get('id') == 'inputForm')
 br['memorableAnswer'] = PASSWORD
+
 buildup = ''
 for control in br.form.controls:
 	if control.name == 'password':
