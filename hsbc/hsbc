@@ -1,7 +1,7 @@
 #!/usr/bin/python -tt
 
-# HSBC account balance scraper v2.1.1
-# Copyright (c) 2007-9, John Morrissey <jwm@horde.net>
+# HSBC account balance scraper v2.2
+# Copyright (c) 2007-11, 2013-4, John Morrissey <jwm@horde.net>
 # Copyright (c) 2010, Matthew John Ernisse <mernisse@ub3rgeek.net>
 #
 # This program is free software; you can redistribute it and/or modify it
@@ -112,14 +112,23 @@ if DEBUG:
 
 
 try:
-	br.open('https://%s/1/2/3/personal/online-services/personal-internet-banking/log-on' % host)
+	br.open('https://www.hsbcadvanceusa.com/')
 except HTTPError, e:
 	sys.exit('%d %s' % (e.code, e.msg))
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for login page, has %s changed?' % host)
 
-br.select_form(predicate=lambda x: x.attrs.get('id') == 'ibLogonForm')
+br.select_form(predicate=lambda x: x.attrs.get('id') == 'logon')
 br.form['userid'] = USERNAME
+
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve HTML for interstitial before password verification page, has %s changed?' % host)
+
+br.select_form(predicate=lambda x: x.attrs.get('name') == 'tempForm')
 
 try:
 	r = br.submit()
@@ -128,23 +137,34 @@ except HTTPError, e:
 if not br.viewing_html():
 	sys.exit('Unable to retrieve HTML for password verification page, has %s changed?' % host)
 
-br.select_form(predicate=lambda x: x.attrs.get('id') == 'inputForm')
-br['memorableAnswer'] = PASSWORD
+parser = html5lib.HTMLParser(tree=html5lib.treebuilders.getTreeBuilder('beautifulsoup'))
+soup = parser.parse(r.get_data())
 
-buildup = ''
-for control in br.form.controls:
-	if control.name == 'password':
-		control.readonly = False
+# Find out which characters of PASSWORD_FAKE_KEYBOARD we need to submit.
+args = soup.find(attrs={'data-dojo-type': 'hsbcwidget/randCharChalLogon'})
+char_nums = re.sub(r'.*chalNums:\s*\[([^]]+)\],.*', r'\1',
+	args.get('data-dojo-props'), flags=re.DOTALL)
+char_nums = re.split(r',\s*', char_nums)
 
-	if not control.id or control.disabled == True:
-		continue
-	if not re.search(r'^pwd_\d+$', control.id):
-		continue
+password_chars = ''.join([
+	PASSWORD_FAKE_KEYBOARD[int(char_num) - 1]
+	for char_num
+	 in char_nums
+])
 
-	num = int(re.sub(r'^pwd_(\d+)$', r'\1', control.id))
-	control.value = PASSWORD_FAKE_KEYBOARD[num - 1]
-	buildup += control.value
-br['password'] = buildup
+br.select_form(nr=0)
+br.form.new_control('text', 'memorableAnswer', {'value': PASSWORD})
+br.form.new_control('text', 'password', {'value': password_chars})
+br.form.fixup()
+
+try:
+	r = br.submit()
+except HTTPError, e:
+	sys.exit('%d %s' % (e.code, e.msg))
+if not br.viewing_html():
+	sys.exit('Unable to retrieve interstitial before summary page, has %s changed?' % host)
+
+br.select_form(predicate=lambda x: x.attrs.get('name') == 'tempForm')
 
 try:
 	r = br.submit()
